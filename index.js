@@ -82,6 +82,7 @@ const client = new Client({
             '--disable-accelerated-2d-canvas',
             '--no-first-run',
             '--no-zygote',
+            '--single-process',
             '--disable-gpu',
             '--disable-notifications'
         ]
@@ -89,6 +90,18 @@ const client = new Client({
 });
 
 let browserOpened = false;
+
+client.on('loading_screen', (percent, message) => {
+    console.log(`⏳ กำลังโหลดข้อมูล WhatsApp: ${percent}% - ${message}`);
+});
+
+client.on('authenticated', () => {
+    console.log('🔑 ยืนยันตัวตนสำเร็จ (Authenticated)!');
+});
+
+client.on('auth_failure', (msg) => {
+    console.error('❌ ยืนยันตัวตนไม่สำเร็จ:', msg);
+});
 
 client.on('qr', async (qr) => {
     console.log('📱 สร้าง QR Code ใหม่...');
