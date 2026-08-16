@@ -1,8 +1,3 @@
-/**
- * Google Apps Script: ระบบตรวจรับไม้และเบิกตัดไม้ (Wood Inventory & Cutting System)
- * Version: 2.0 (Smart Active Container + Wood Cutting Tab + Gemini AI Integration)
- */
-
 const SHEET_PACKING_LIST = "Packing List";
 const SHEET_WOOD_CUTTING = "ตัดไม้";
 const SHEET_DASHBOARD = "📊 Dashboard";
@@ -15,6 +10,7 @@ function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu("🪵 ระบบ Packing List & ตัดไม้")
     .addItem("📊 สร้าง/อัปเดตหน้า Dashboard", "buildDashboardSheet")
+    .addItem("📥 นำเข้าข้อมูลตู้ PL-28 (37 มัด)", "importPL28Directly")
     .addItem("➕ สร้างแท็บ 'ตัดไม้' (ถ้ายังไม่มี)", "ensureCuttingSheetExists")
     .addItem("🔄 รีเซ็ตยอดรับเข้าทั้งหมด (เฉพาะชีต Packing List)", "resetReceivedQuantities")
     .addToUi();
@@ -98,21 +94,23 @@ function buildDashboardSheet() {
   dash.getRange(9, 1, 1, invHeaders.length).setValues([invHeaders]).setBackground("#334155").setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center");
   dash.setRowHeight(9, 26);
 
-  // Row 10: Formula row for Current PL
-  dash.getRange("A10").setValue(1).setHorizontalAlignment("center");
-  dash.getRange("B10").setValue("PL- 25/ASN/TM/VII/26").setFontWeight("bold").setHorizontalAlignment("left");
-  dash.getRange("C10").setValue("BEAU 5231653/ID48136AA").setHorizontalAlignment("left");
-  dash.getRange("D10").setValue("2026-07-01").setHorizontalAlignment("center");
-  dash.getRange("E10").setFormula("=SUM('Packing List'!H2:H)").setNumberFormat("#,##0").setHorizontalAlignment("right");
-  dash.getRange("F10").setFormula("=SUM('Packing List'!I2:I)").setNumberFormat("#,##0.00").setHorizontalAlignment("right");
-  dash.getRange("G10").setFormula("=SUM('Packing List'!J2:J)").setNumberFormat("#,##0").setHorizontalAlignment("right");
-  dash.getRange("H10").setFormula("=E10-G10").setNumberFormat("#,##0").setHorizontalAlignment("right");
-  dash.getRange("I10").setFormula("=SUM('ตัดไม้'!H2:H)").setNumberFormat("#,##0").setHorizontalAlignment("right");
-  dash.getRange("J10").setFormula("=G10-I10").setNumberFormat("#,##0").setFontWeight("bold").setFontColor("#059669").setHorizontalAlignment("right");
-  dash.getRange("K10").setFormula('=IF(J10=0, "⚪ ตัดหมดเกลี้ยง (ปิดงบ)", IF(H10=0, "🟢 รับครบ (กำลังตัดใช้)", "🟡 กำลังรับเข้า & ตัดใช้"))').setHorizontalAlignment("center").setFontWeight("bold");
-
-  dash.getRange("A10:K10").setBackground("#f8fafc");
-  dash.setRowHeight(10, 25);
+  // Row 10 to 14: Dynamic Formula rows for Invoices (รองรับหลาย Invoice อัตโนมัติ)
+  dash.getRange("B10").setFormula("=UNIQUE(FILTER('Packing List'!C2:C, 'Packing List'!C2:C<>\"\"))").setFontWeight("bold").setHorizontalAlignment("left");
+  
+  for (let r = 10; r <= 14; r++) {
+    dash.getRange(`A${r}`).setFormula(`=IF(ISBLANK(B${r}), "", ${r - 9})`).setHorizontalAlignment("center");
+    dash.getRange(`C${r}`).setFormula(`=IF(ISBLANK(B${r}), "", XLOOKUP(B${r}, 'Packing List'!C:C, 'Packing List'!D:D, "-"))`).setHorizontalAlignment("left");
+    dash.getRange(`D${r}`).setFormula(`=IF(ISBLANK(B${r}), "", TEXT(XLOOKUP(B${r}, 'Packing List'!C:C, 'Packing List'!B:B, "-"), "yyyy-MM-dd"))`).setHorizontalAlignment("center");
+    dash.getRange(`E${r}`).setFormula(`=IF(ISBLANK(B${r}), "", SUMIFS('Packing List'!H:H, 'Packing List'!C:C, B${r}))`).setNumberFormat("#,##0").setHorizontalAlignment("right");
+    dash.getRange(`F${r}`).setFormula(`=IF(ISBLANK(B${r}), "", SUMIFS('Packing List'!I:I, 'Packing List'!C:C, B${r}))`).setNumberFormat("#,##0.00").setHorizontalAlignment("right");
+    dash.getRange(`G${r}`).setFormula(`=IF(ISBLANK(B${r}), "", SUMIFS('Packing List'!J:J, 'Packing List'!C:C, B${r}))`).setNumberFormat("#,##0").setHorizontalAlignment("right");
+    dash.getRange(`H${r}`).setFormula(`=IF(ISBLANK(B${r}), "", E${r}-G${r})`).setNumberFormat("#,##0").setHorizontalAlignment("right");
+    dash.getRange(`I${r}`).setFormula(`=IF(ISBLANK(B${r}), "", SUMIFS('ตัดไม้'!H:H, 'ตัดไม้'!C:C, B${r}))`).setNumberFormat("#,##0").setHorizontalAlignment("right");
+    dash.getRange(`J${r}`).setFormula(`=IF(ISBLANK(B${r}), "", G${r}-I${r})`).setNumberFormat("#,##0").setFontWeight("bold").setFontColor("#059669").setHorizontalAlignment("right");
+    dash.getRange(`K${r}`).setFormula(`=IF(ISBLANK(B${r}), "", IF(J${r}=0, "⚪ ตัดหมดเกลี้ยง (ปิดงบ)", IF(H${r}=0, "🟢 รับครบ (กำลังตัดใช้)", "🟡 กำลังรับเข้า & ตัดใช้")))`).setHorizontalAlignment("center").setFontWeight("bold");
+    dash.getRange(`A${r}:K${r}`).setBackground(r % 2 === 0 ? "#f8fafc" : "#ffffff");
+    dash.setRowHeight(r, 25);
+  }
 
   dash.setRowHeight(11, 15); // Spacer
 
@@ -716,11 +714,118 @@ function doPost(e) {
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
+    if (action === "import_packing_list") {
+      const newRows = payload.rows || [];
+      if (newRows.length === 0) {
+        return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "ไม่มีข้อมูล rows ที่จะนำเข้า" })).setMimeType(ContentService.MimeType.JSON);
+      }
+      
+      const lastRow = sheetPL.getLastRow();
+      let startIdx = lastRow >= 2 ? Number(sheetPL.getRange(lastRow, 1).getValue()) || 0 : 0;
+      
+      const appendValues = newRows.map((r, i) => [
+        startIdx + i + 1,
+        r.date || "2026-07-21",
+        r.plNo || "PL-28/ASN/TM/VII/26",
+        r.container || "TRHU 5939460/ID49590AA",
+        r.item,
+        r.bdl,
+        r.dim,
+        Number(r.qty) || 0,
+        Number(r.vol) || 0,
+        0,
+        Number(r.qty) || 0,
+        "⏳ ยังไม่รับ",
+        "-"
+      ]);
+      
+      sheetPL.getRange(lastRow + 1, 1, appendValues.length, appendValues[0].length).setValues(appendValues);
+      buildDashboardSheet();
+      
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        message: `นำเข้าข้อมูล Packing List สำเร็จ ${appendValues.length} รายการ และอัปเดตหน้า Dashboard เรียบร้อยแล้ว!`,
+        importedCount: appendValues.length
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
     return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "ไม่พบ Action ที่ระบุ" })).setMimeType(ContentService.MimeType.JSON);
 
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() })).setMimeType(ContentService.MimeType.JSON);
   }
+}
+
+/**
+ * นำเข้าข้อมูลตู้ PL-28 (37 มัด) เข้าสู่ Packing List โดยตรง
+ */
+function importPL28Directly() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheetPL = ss.getSheetByName(SHEET_PACKING_LIST);
+  if (!sheetPL) return;
+
+  const PL28_DATA = [
+    { item: "S4S 17x100x520", bdl: "1", dim: "17 x 100 x 520 MM", qty: 1266, vol: 1.119 },
+    { item: "S4S 17x100x520", bdl: "2", dim: "17 x 100 x 520 MM", qty: 1266, vol: 1.119 },
+    { item: "S4S 17x100x520", bdl: "3", dim: "17 x 100 x 520 MM", qty: 1266, vol: 1.119 },
+    { item: "S4S 17x100x520", bdl: "4", dim: "17 x 100 x 520 MM", qty: 1266, vol: 1.119 },
+    { item: "S4S 17x100x520", bdl: "5", dim: "17 x 100 x 520 MM", qty: 1266, vol: 1.119 },
+    { item: "S4S 17x100x520", bdl: "6", dim: "17 x 100 x 520 MM", qty: 1266, vol: 1.119 },
+    { item: "S4S 17x100x520", bdl: "7", dim: "17 x 100 x 520 MM", qty: 1266, vol: 1.119 },
+    { item: "S4S 17x100x520", bdl: "8", dim: "17 x 100 x 520 MM", qty: 1266, vol: 1.119 },
+    { item: "S4S 17x100x520", bdl: "9", dim: "17 x 100 x 520 MM", qty: 1266, vol: 1.119 },
+    { item: "S4S 17x100x520", bdl: "10", dim: "17 x 100 x 520 MM", qty: 1266, vol: 1.119 },
+    { item: "S4S 17x100x470", bdl: "11", dim: "17 x 100 x 470 MM", qty: 1266, vol: 1.012 },
+    { item: "S4S 17x100x470", bdl: "12", dim: "17 x 100 x 470 MM", qty: 1266, vol: 1.012 },
+    { item: "S4S 17x100x470", bdl: "13", dim: "17 x 100 x 470 MM", qty: 1266, vol: 1.012 },
+    { item: "S4S 17x100x470", bdl: "14", dim: "17 x 100 x 470 MM", qty: 1266, vol: 1.012 },
+    { item: "S4S 17x100x470", bdl: "15", dim: "17 x 100 x 470 MM", qty: 1266, vol: 1.012 },
+    { item: "S4S 17x100x470", bdl: "16", dim: "17 x 100 x 470 MM", qty: 1266, vol: 1.012 },
+    { item: "S4S 17x100x470", bdl: "17", dim: "17 x 100 x 470 MM", qty: 1266, vol: 1.012 },
+    { item: "S4S 17x100x470", bdl: "18", dim: "17 x 100 x 470 MM", qty: 1266, vol: 1.012 },
+    { item: "S4S 17x100x470", bdl: "19", dim: "17 x 100 x 470 MM", qty: 1266, vol: 1.012 },
+    { item: "S4S 17x100x470", bdl: "20", dim: "17 x 100 x 470 MM", qty: 1266, vol: 1.012 },
+    { item: "S4S 17x100x470", bdl: "21", dim: "17 x 100 x 470 MM", qty: 1266, vol: 1.012 },
+    { item: "S4S 17x98x520", bdl: "22", dim: "17 x 98 x 520 MM", qty: 1320, vol: 1.144 },
+    { item: "S4S 17x98x470", bdl: "23", dim: "17 x 98 x 470 MM", qty: 1320, vol: 1.034 },
+    { item: "S4S 17x83x520", bdl: "24", dim: "17 x 83 x 520 MM", qty: 1560, vol: 1.145 },
+    { item: "S4S 17x83x520", bdl: "25", dim: "17 x 83 x 520 MM", qty: 1560, vol: 1.145 },
+    { item: "S4S 17x83x520", bdl: "26", dim: "17 x 83 x 520 MM", qty: 1560, vol: 1.145 },
+    { item: "S4S 17x83x520", bdl: "27", dim: "17 x 83 x 520 MM", qty: 1560, vol: 1.145 },
+    { item: "S4S 17x83x520", bdl: "28", dim: "17 x 83 x 520 MM", qty: 1560, vol: 1.145 },
+    { item: "S4S 17x83x470", bdl: "29", dim: "17 x 83 x 470 MM", qty: 1560, vol: 1.035 },
+    { item: "S4S 17x83x470", bdl: "30", dim: "17 x 83 x 470 MM", qty: 1560, vol: 1.035 },
+    { item: "S4S 17x83x470", bdl: "31", dim: "17 x 83 x 470 MM", qty: 1560, vol: 1.035 },
+    { item: "S4S 17x83x470", bdl: "32", dim: "17 x 83 x 470 MM", qty: 1560, vol: 1.035 },
+    { item: "S4S 17x78x520", bdl: "33", dim: "17 x 78 x 520 MM", qty: 1644, vol: 1.134 },
+    { item: "S4S 17x78x520", bdl: "34", dim: "17 x 78 x 520 MM", qty: 1644, vol: 1.134 },
+    { item: "S4S 17x78x520", bdl: "35", dim: "17 x 78 x 520 MM", qty: 1644, vol: 1.134 },
+    { item: "S4S 17x78x520", bdl: "36", dim: "17 x 78 x 520 MM", qty: 1644, vol: 1.134 },
+    { item: "S4S 17x78x470", bdl: "37", dim: "17 x 78 x 470 MM", qty: 1644, vol: 1.025 }
+  ];
+
+  const lastRow = sheetPL.getLastRow();
+  let startIdx = lastRow >= 2 ? Number(sheetPL.getRange(lastRow, 1).getValue()) || 0 : 0;
+
+  const appendValues = PL28_DATA.map((r, i) => [
+    startIdx + i + 1,
+    "2026-07-21",
+    "PL-28/ASN/TM/VII/26",
+    "TRHU 5939460/ID49590AA",
+    r.item,
+    r.bdl,
+    r.dim,
+    r.qty,
+    r.vol,
+    0,
+    r.qty,
+    "⏳ ยังไม่รับ",
+    "-"
+  ]);
+
+  sheetPL.getRange(lastRow + 1, 1, appendValues.length, appendValues[0].length).setValues(appendValues);
+  buildDashboardSheet();
+  SpreadsheetApp.getUi().alert(`✅ นำเข้าข้อมูลตู้ PL-28 สำเร็จ ${appendValues.length} มัด (${appendValues.reduce((s, r) => s + r[7], 0).toLocaleString()} ชิ้น) เรียบร้อยแล้ว!`);
 }
 
 function resetReceivedQuantities() {
