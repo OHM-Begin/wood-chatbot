@@ -378,23 +378,29 @@ function doPost(e) {
     if (action === "search") {
       let query = String(payload.query || "").trim().toLowerCase();
       let cleanQuery = query.replace(/^มัด\s*/, "").replace(/^bdl\s*/, "").trim();
+      const normalize = (s) => String(s || "").toLowerCase().replace(/[\s\-_]/g, "");
+      const targetInvoiceClean = payload.invoice ? normalize(payload.invoice) : "";
       const results = [];
 
       for (let i = 1; i < data.length; i++) {
         const row = data[i];
-        const pl = String(row[colPl] || "").trim().toLowerCase();
-        const ctn = String(row[colCtn] || "").trim().toLowerCase();
+        const pl = String(row[colPl] || "").trim();
+        const ctn = String(row[colCtn] || "").trim();
         const itemNo = String(row[colItem] || "").trim().toLowerCase();
         const bdlNo = String(row[colBdl] || "").trim().toLowerCase();
+
+        const plClean = normalize(pl);
+        const ctnClean = normalize(ctn);
+        const matchInvoice = !targetInvoiceClean || plClean.includes(targetInvoiceClean) || ctnClean.includes(targetInvoiceClean);
 
         const matchQuery = (itemNo.includes(query) || bdlNo === query || bdlNo === cleanQuery || 
                             query === `มัด ${bdlNo}` || query === `bdl ${bdlNo}` || query === `มัด${bdlNo}`);
 
-        if (matchQuery) {
+        if (matchInvoice && matchQuery) {
           const exp = Number(row[colExp]) || 0;
           const rec = Number(row[colRec]) || 0;
           const bal = exp - rec;
-          const cut = cutMap[`${pl}|${ctn}|${itemNo}|${bdlNo}`] || cutMap[`${itemNo}|${bdlNo}`] || 0;
+          const cut = cutMap[`${pl.toLowerCase()}|${ctn.toLowerCase()}|${itemNo}|${bdlNo}`] || cutMap[`${itemNo}|${bdlNo}`] || 0;
           const avail = rec - cut;
 
           results.push({
@@ -427,19 +433,30 @@ function doPost(e) {
       const tz = Session.getScriptTimeZone() || "Asia/Bangkok";
       const nowStr = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd HH:mm:ss");
 
+      const normalize = (s) => String(s || "").toLowerCase().replace(/[\s\-_]/g, "");
+      const targetInvoiceClean = payload.invoice ? normalize(payload.invoice) : (payload.container ? normalize(payload.container) : "");
+
       const matchedCandidates = [];
       for (let i = 1; i < data.length; i++) {
         const row = data[i];
-        const pl = String(row[colPl] || "").trim().toLowerCase();
-        const ctn = String(row[colCtn] || "").trim().toLowerCase();
+        const pl = String(row[colPl] || "").trim();
+        const ctn = String(row[colCtn] || "").trim();
         const itemNo = String(row[colItem] || "").trim().toLowerCase();
         const bdlNo = String(row[colBdl] || "").trim().toLowerCase();
 
-        const matchCtn = (!targetCtnFilter || ctn.includes(targetCtnFilter) || targetCtnFilter.includes(ctn));
+        const plClean = normalize(pl);
+        const ctnClean = normalize(ctn);
+
+        // ถ้าผู้ใช้ระบุ Invoice เช่น "PL25" -> กรองเฉพาะตู้ PL-25
+        // ถ้าผู้ใช้ไม่ระบุ Invoice -> ยึดตู้ Active ปัจจุบัน
+        const matchInvoice = targetInvoiceClean 
+          ? (plClean.includes(targetInvoiceClean) || ctnClean.includes(targetInvoiceClean))
+          : (pl === activeInfo.activePl || ctn === activeInfo.activeContainer);
+
         const matchItem = (itemNo === query || bdlNo === query || bdlNo === cleanQuery || 
                            query === `มัด ${bdlNo}` || query === `bdl ${bdlNo}` || query === `มัด${bdlNo}`);
 
-        if (matchCtn && matchItem) {
+        if (matchInvoice && matchItem) {
           matchedCandidates.push({
             rowIdx: i + 1,
             plNo: row[colPl],
