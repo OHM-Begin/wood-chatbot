@@ -553,32 +553,39 @@ async function processMessage(msg) {
 
     // ====================================================
     // 5. คำสั่งบันทึกตรวจรับไม้เข้า (Receive Fast Path)
-    // รูปแบบ: "มัด 24 1592", "มัด 24,1592", "8156565 1592"
+    // รูปแบบ: "PL28 มัด 12 1266", "PL25 มัด 12 200", "มัด 12 1266", "PL28 12 1266", "12 1266"
     // ====================================================
-    let receiveMatch = rawText.match(/^(?:มัด|bdl)\s*([0-9]+)[\s,:=]+([0-9]+)$/i);
+    let receiveInvoice = null;
     let targetQuery = null;
     let targetQty = 0;
 
+    // 5.1 กรณี "PL28 มัด 12 1266" หรือ "มัด 12 1266"
+    let receiveMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s+)?(?:มัด|bdl)\s*([0-9]+)[\s,:=]+([0-9]+)$/i);
     if (receiveMatch) {
-        targetQuery = `มัด ${receiveMatch[1]}`;
-        targetQty = parseInt(receiveMatch[2], 10);
+        receiveInvoice = receiveMatch[1] ? receiveMatch[1].trim() : null;
+        targetQuery = `มัด ${receiveMatch[2].trim()}`;
+        targetQty = parseInt(receiveMatch[3], 10);
     } else {
-        receiveMatch = rawText.match(/^([0-9]{6,8})[\s,:=]+([0-9]+)$/);
-        if (receiveMatch) {
-            targetQuery = receiveMatch[1];
-            targetQty = parseInt(receiveMatch[2], 10);
+        // 5.2 กรณี "8156565 1592" หรือ "PL28 8156565 1592"
+        let receivePartMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s+)?([0-9]{6,8})[\s,:=]+([0-9]+)$/i);
+        if (receivePartMatch) {
+            receiveInvoice = receivePartMatch[1] ? receivePartMatch[1].trim() : null;
+            targetQuery = receivePartMatch[2].trim();
+            targetQty = parseInt(receivePartMatch[3], 10);
         } else {
-            receiveMatch = rawText.match(/^([0-9]{1,2})[\s,:=]+([0-9]{2,6})$/);
-            if (receiveMatch) {
-                targetQuery = `มัด ${receiveMatch[1]}`;
-                targetQty = parseInt(receiveMatch[2], 10);
+            // 5.3 กรณี "PL28 12 1266" หรือ "12 1266" (เลขมัด 1-2 หลัก ตามด้วยยอด)
+            let receiveShortMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s+)?([0-9]{1,2})[\s,:=]+([0-9]{2,6})$/i);
+            if (receiveShortMatch) {
+                receiveInvoice = receiveShortMatch[1] ? receiveShortMatch[1].trim() : null;
+                targetQuery = `มัด ${receiveShortMatch[2].trim()}`;
+                targetQty = parseInt(receiveShortMatch[3], 10);
             }
         }
     }
 
     if (targetQuery && targetQty > 0) {
         statusCache = null; // Clear cache on change
-        const res = await callGAS({ action: 'receive', query: targetQuery, quantity: targetQty });
+        const res = await callGAS({ action: 'receive', query: targetQuery, quantity: targetQty, invoice: receiveInvoice });
         if (res && res.status === 'success' && res.item) {
             const item = res.item || '-';
             const bdl = res.bdl || '-';
@@ -588,11 +595,13 @@ async function processMessage(msg) {
             const exp = Number(res.expQty) || 0;
             const bal = Number(res.balQty) || 0;
             const status = res.statusText || 'สำเร็จ';
+            const plNo = res.plNo || (receiveInvoice ? receiveInvoice.toUpperCase() : 'ตู้ปัจจุบัน');
 
             const replyText = `✅ *บันทึกรับเข้าสำเร็จ!*\n` +
                               `━━━━━━━━━━━━━━━━━━━\n` +
                               `🏷️ *Part No.:* ${item} (มัดที่: ${bdl})\n` +
                               `🪵 *ขนาด:* ${dim}\n` +
+                              `📋 *Invoice:* ${plNo}\n` +
                               `📥 *รับรอบนี้:* +${added.toLocaleString()} PCS\n` +
                               `📊 *รวมรับแล้ว:* ${totalRec.toLocaleString()} / ${exp.toLocaleString()} PCS\n` +
                               `⏳ *คงเหลือในตู้:* ${bal.toLocaleString()} PCS\n` +
