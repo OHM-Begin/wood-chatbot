@@ -359,8 +359,11 @@ async function processMessage(msg) {
                          `*[ 2 ]* ⏳ *ดูรายการมัดที่ยังไม่ครบ* ➔ พิมพ์ \`2\` หรือ \`ค้างรับ\`\n` +
                          `*[ 3 ]* 🔍 *เช็คข้อมูลมัดไม้* ➔ พิมพ์ \`มัด [เลข]\` เช่น \`มัด 8\`\n` +
                          `*[ 4 ]* 📥 *บันทึกรับไม้เข้า* ➔ พิมพ์ \`มัด [เลข] [ยอด]\` เช่น \`มัด 24 1592\`\n` +
-                         `*[ 5 ]* ✂️ *บันทึกตัดไม้ออก* ➔ พิมพ์ \`มัด [เลข] ตัด [ยอด]\` เช่น \`มัด 8 ตัด 750\`\n` +
-                         `*[ 6 ]* 🧠 *คุยถาม AI ภาษาคน* ➔ เช่น *"IV นี้ เหลือ Part อะไรบ้าง"*\n` +
+                         `*[ 5 ]* ✂️ *บันทึกตัดไม้ออก* ➔ พิมพ์ \`[เลข IV] ตัด [Part/มัด] [ยอด]\`\n` +
+                         `      • ตัดตาม Part (FIFO): \`PL25 ตัด 8156585 750\`\n` +
+                         `      • ตัดตามมัด: \`PL25 มัด 8 ตัด 750\`\n` +
+                         `      • ตัดหมดมัด: \`PL25 ตัดหมด 8\`\n` +
+                         `*[ 6 ]* 🧠 *คุยถามสต็อกภาษาคน* ➔ เช่น \`Iv pl25 ยอดค้างรับ ทั้งหมด กี่ชิ้น\`\n` +
                          `━━━━━━━━━━━━━━━━━━━\n` +
                          `💡 *ลองพิมพ์ "1" หรือพิมพ์ "มัด 8" ได้เลยครับ*`;
         return sendReply(msg, helpText);
@@ -376,10 +379,16 @@ async function processMessage(msg) {
     }
 
     // ====================================================
-    // 2. สรุปภาพรวมตู้ (Container Summary)
+    // 2. สรุปภาพรวมตู้ & คำถามยอดค้างรับภาษาคน
+    // รูปแบบ: "1", "สรุป", "สถานะ", "Iv PL25 ยังค้างรับกี่ชิ้น", "ค้างรับกี่ชิ้น", "เหลือกี่ชิ้น", "เหลือเท่าไหร่"
     // ====================================================
-    const summaryKeywords = ['!สรุป', '!status', '!summary', 'สรุป', 'status', 'summary', 'ยอด', 'รายงาน'];
-    if (summaryKeywords.includes(cleanText)) {
+    const isSummaryIntent = cleanText === '1' || 
+                            ['!สรุป', '!status', '!summary', 'สรุป', 'status', 'summary', 'รายงาน'].includes(cleanText) ||
+                            (cleanText.includes('ค้างรับ') && (cleanText.includes('กี่') || cleanText.includes('เท่าไหร่') || cleanText.includes('ยอด') || cleanText.includes('รวม'))) ||
+                            (cleanText.includes('เหลือ') && cleanText.includes('ชิ้น')) ||
+                            (cleanText.includes('เหลือ') && cleanText.includes('เท่าไหร่'));
+
+    if (isSummaryIntent) {
         const res = await callGAS({ action: 'summary' });
         if (res && res.status === 'success' && res.totalExpected !== undefined) {
             const exp = Number(res.totalExpected) || 0;
@@ -391,17 +400,16 @@ async function processMessage(msg) {
             const comp = res.completedCount || 0;
             const pend = res.pendingCount || 0;
             const ctn = res.container || 'BEAU 5231653';
+            const pl = res.plNo || 'PL-25';
 
-            const summaryText = `📊 *สรุปสถานะตู้ปัจจุบัน: ${ctn}*\n` +
+            const summaryText = `📊 *สรุปสถานะตู้: ${ctn} (${pl})*\n` +
                                 `━━━━━━━━━━━━━━━━━━━\n` +
-                                `📦 *ยอดทั้งหมดตาม PL:* ${exp.toLocaleString()} PCS\n` +
-                                `📥 *รับเข้าคลังแล้ว:* ${rec.toLocaleString()} PCS (${pct}%)\n` +
-                                `⏳ *คงเหลือในตู้ (รอรับ):* ${bal.toLocaleString()} PCS\n` +
-                                `───────────────────\n` +
-                                `✂️ *ตัดไม้ออกไปแล้ว:* ${cut.toLocaleString()} PCS\n` +
+                                `⏳ *ยอดค้างรับคงเหลือในตู้:* *${bal.toLocaleString()} PCS*\n` +
+                                `📥 *รับเข้าคลังแล้ว:* ${rec.toLocaleString()} / ${exp.toLocaleString()} PCS (${pct}%)\n` +
                                 `🪵 *ไม้คงเหลือพร้อมใช้ในคลัง:* *${avail.toLocaleString()} PCS*\n` +
+                                `✂️ *ตัดไม้ออกไปแล้ว:* ${cut.toLocaleString()} PCS\n` +
                                 `───────────────────\n` +
-                                `✅ *รับครบแล้ว:* ${comp} รายการ | ⏳ *รอรับ:* ${pend} รายการ\n` +
+                                `✅ *รับครบแล้ว:* ${comp} รายการ | ⏳ *ยังรอรับ:* ${pend} รายการ\n` +
                                 `━━━━━━━━━━━━━━━━━━━`;
             return sendReply(msg, summaryText);
         } else {
@@ -410,10 +418,14 @@ async function processMessage(msg) {
     }
 
     // ====================================================
-    // 3. รายการที่ยังค้างรับ (Pending Items List)
+    // 3. รายการที่ยังค้างรับ (Pending Items List & "เหลือ Part อะไรบ้าง")
+    // รูปแบบ: "2", "ค้างรับ", "ยังไม่ครบ", "รอรับ", "เหลือ Part อะไรบ้าง", "มี Part อะไรบ้าง"
     // ====================================================
-    const pendingKeywords = ['ค้างรับ', 'ยังไม่ครบ', 'รอรับ', 'pending', '!pending', 'เช็คค้าง'];
-    if (pendingKeywords.includes(cleanText)) {
+    const isPendingIntent = cleanText === '2' ||
+                            ['ค้างรับ', 'ยังไม่ครบ', 'รอรับ', 'pending', '!pending', 'เช็คค้าง'].includes(cleanText) ||
+                            (cleanText.includes('part') && (cleanText.includes('เหลือ') || cleanText.includes('ค้าง') || cleanText.includes('อะไร')));
+
+    if (isPendingIntent) {
         const res = await callGAS({ action: 'pending_list' });
         if (res && res.status === 'success') {
             const items = res.items || [];
@@ -424,14 +436,15 @@ async function processMessage(msg) {
             let pendingReply = `⏳ *รายการไม้ที่ยังรอรับเข้าตู้: ${res.container} (${items.length} รายการ)*\n` +
                                `━━━━━━━━━━━━━━━━━━━\n`;
             
-            items.slice(0, 10).forEach(it => {
-                pendingReply += `• *มัด ${it.bdl}* (Part ${it.item}): ขาดอีก *${Number(it.balQty).toLocaleString()}* PCS (รับแล้ว ${Number(it.recQty).toLocaleString()}/${Number(it.expQty).toLocaleString()})\n`;
+            items.slice(0, 15).forEach(it => {
+                pendingReply += `• *Part ${it.item}* (มัด ${it.bdl}): ขาดอีก *${Number(it.balQty).toLocaleString()}* PCS [ขนาด: ${it.dim}]\n`;
             });
 
-            if (items.length > 10) {
-                pendingReply += `*(และอีก ${items.length - 10} รายการ... พิมพ์ "มัด [เลข]" เพื่อดูเฉพาะมัดได้ครับ)*\n`;
+            if (items.length > 15) {
+                pendingReply += `*(และอีก ${items.length - 15} รายการ... พิมพ์ "มัด [เลข]" เพื่อดูเฉพาะมัดได้ครับ)*\n`;
             }
-            pendingReply += `━━━━━━━━━━━━━━━━━━━`;
+            pendingReply += `━━━━━━━━━━━━━━━━━━━\n` +
+                            `💡 *พิมพ์ "1" เพื่อดูยอดรวมทั้งหมด*`;
             return sendReply(msg, pendingReply);
         }
     }
@@ -616,7 +629,7 @@ async function processMessage(msg) {
                                `🪵 *พร้อมใช้ในคลัง:* *${avail.toLocaleString()} PCS* (ตัดแล้ว ${cut.toLocaleString()} PCS)\n` +
                                `───────────────────\n` +
                                `👉 *แตะเพื่อรับเต็มมัด:* \`มัด ${r.bdl} ${bal > 0 ? bal : exp}\`\n` +
-                               `👉 *แตะเพื่อตัดไม้:* \`มัด ${r.bdl} ตัด 200\`\n` +
+                               `👉 *แตะเพื่อตัดไม้:* \`PL25 มัด ${r.bdl} ตัด ${avail > 0 ? avail : 100}\`\n` +
                                `───────────────────\n`;
             });
 
