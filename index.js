@@ -468,7 +468,7 @@ async function processMessage(msg) {
     }
 
     // 4.1 กรณี "ตัดหมด 14", "ตัดมัด 14 หมด", "เบิกมัด 14 ทั้งหมด"
-    let cutAllMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s+)?(?:ตัด|เบิก)(?:หมด|ทั้งหมด|\s+หมด|\s+ทั้งหมด)?(?:\s*มัด|\s*bdl)?\s*(\d+)(?:\s+(?:หมด|ทั้งหมด))?(?:\s+(.+))?$/i);
+    let cutAllMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s*)?(?:ตัด|เบิก)(?:หมด|ทั้งหมด|\s+หมด|\s+ทั้งหมด)?(?:\s*มัด|\s*bdl)?\s*(\d+)(?:\s+(?:หมด|ทั้งหมด))?(?:\s+(.+))?$/i);
     if (cutAllMatch && (rawText.includes('หมด') || rawText.includes('ทั้งหมด'))) {
         cutInvoice = cutAllMatch[1] ? cutAllMatch[1].trim() : null;
         cutTargetQuery = `มัด ${cutAllMatch[2].trim()}`;
@@ -476,9 +476,9 @@ async function processMessage(msg) {
         cutNote = cutAllMatch[3] ? `${senderName} (${cutAllMatch[3].trim()})` : `เบิกตัดหมดมัด โดย ${senderName}`;
     }
 
-    // 4.2 กรณีตัดตาม Part No. (FIFO เช่น "ตัด 8156521 1000" หรือ "8156521 ตัด 1000")
+    // 4.2 กรณีตัดตาม Part No. (FIFO เช่น "PL25 ตัด 8156521 1000" หรือ "8156521 ตัด 1000")
     if (!cutTargetQuery) {
-        let cutPartMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s+)?(?:ตัด\s+)?([0-9]{6,8})[\s,:]+(?:ตัด[\s,:]+)?([0-9]+)(?:\s+(.+))?$/i);
+        let cutPartMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s*)?(?:ตัด\s+)?([0-9]{6,8})[\s,:]+(?:ตัด[\s,:]+)?([0-9]+)(?:\s+(.+))?$/i);
         if (cutPartMatch) {
             cutInvoice = cutPartMatch[1] ? cutPartMatch[1].trim() : null;
             cutTargetQuery = cutPartMatch[2].trim();
@@ -489,7 +489,7 @@ async function processMessage(msg) {
 
     // 4.3 กรณีตัดตามมัดปกติ (เช่น "PL25 มัด 14 ตัด 320", "PL25 ตัด 14 320", "มัด 14 ตัด 320", "ตัด 14 320")
     if (!cutTargetQuery) {
-        let cutMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s+)?(?:มัด|bdl)?\s*(\d+)[\s,:]+ตัด[\s,:]+(\d+)(?:\s+(.+))?$/i);
+        let cutMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s*)?(?:มัด|bdl)?\s*(\d+)[\s,:]+ตัด[\s,:]+(\d+)(?:\s+(.+))?$/i);
         if (cutMatch) {
             cutInvoice = cutMatch[1] ? cutMatch[1].trim() : null;
             cutTargetQuery = `มัด ${cutMatch[2].trim()}`;
@@ -559,22 +559,22 @@ async function processMessage(msg) {
     let targetQuery = null;
     let targetQty = 0;
 
-    // 5.1 กรณี "PL28 มัด 12 1266" หรือ "มัด 12 1266"
-    let receiveMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s+)?(?:มัด|bdl)\s*([0-9]+)[\s,:=]+([0-9]+)$/i);
+    // 5.1 กรณี "PL25 มัด31 664" หรือ "PL25มัด 26 528" หรือ "มัด 12 1266"
+    let receiveMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s*)?(?:มัด|bdl)\s*([0-9]+)[\s,:=]+([0-9]+)$/i);
     if (receiveMatch) {
         receiveInvoice = receiveMatch[1] ? receiveMatch[1].trim() : null;
         targetQuery = `มัด ${receiveMatch[2].trim()}`;
         targetQty = parseInt(receiveMatch[3], 10);
     } else {
         // 5.2 กรณี "8156565 1592" หรือ "PL28 8156565 1592"
-        let receivePartMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s+)?([0-9]{6,8})[\s,:=]+([0-9]+)$/i);
+        let receivePartMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s*)?([0-9]{6,8})[\s,:=]+([0-9]+)$/i);
         if (receivePartMatch) {
             receiveInvoice = receivePartMatch[1] ? receivePartMatch[1].trim() : null;
             targetQuery = receivePartMatch[2].trim();
             targetQty = parseInt(receivePartMatch[3], 10);
         } else {
             // 5.3 กรณี "PL28 12 1266" หรือ "12 1266" (เลขมัด 1-2 หลัก ตามด้วยยอด)
-            let receiveShortMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s+)?([0-9]{1,2})[\s,:=]+([0-9]{2,6})$/i);
+            let receiveShortMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s*)?([0-9]{1,2})[\s,:=]+([0-9]{2,6})$/i);
             if (receiveShortMatch) {
                 receiveInvoice = receiveShortMatch[1] ? receiveShortMatch[1].trim() : null;
                 targetQuery = `มัด ${receiveShortMatch[2].trim()}`;
