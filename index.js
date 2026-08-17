@@ -328,7 +328,7 @@ async function processMessage(msg) {
     }
 
     const rawText = msg.body.trim();
-    const cleanText = rawText.toLowerCase();
+    let cleanText = rawText.toLowerCase();
 
     // 🛑 CRITICAL LOOP PREVENTION: Ignore any message sent by the bot itself!
     if (botOutgoingMessageTexts.has(rawText) ||
@@ -672,7 +672,12 @@ async function processMessage(msg) {
     }
 }
 
-// Listen to message_create to catch user messages in all contexts
-client.on('message_create', processMessage);
+// Listen to incoming messages from other people AND self-sent messages
+client.on('message', processMessage);
+client.on('message_create', (msg) => {
+    if (msg.fromMe) {
+        processMessage(msg);
+    }
+});
 
 client.initialize();
