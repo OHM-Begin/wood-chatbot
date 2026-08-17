@@ -467,9 +467,18 @@ async function processMessage(msg) {
         senderName = msg.from ? msg.from.split('@')[0] : 'ผู้ใช้';
     }
 
+    // 4.0 กรณีระบุทั้งมัดและ Part (เช่น "PL25 มัด 33 ตัด 6601628 315" หรือ "PL25 มัด 33 ตัด Part 6601628 315")
+    let cutBdlPartMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s*)?(?:มัด|bdl)\s*(\d+)[\s,:]+ตัด(?:\s*part|\s*พาร์ท|\s*รายการ)?\s*([0-9]{6,8})[\s,:]+([0-9]+)(?:\s+(.+))?$/i);
+    if (cutBdlPartMatch) {
+        cutInvoice = cutBdlPartMatch[1] ? cutBdlPartMatch[1].trim() : null;
+        cutTargetQuery = cutBdlPartMatch[3].trim();
+        cutQty = parseInt(cutBdlPartMatch[4], 10);
+        cutNote = cutBdlPartMatch[5] ? `${senderName} (${cutBdlPartMatch[5].trim()})` : `เบิกตัดมัด ${cutBdlPartMatch[2]} โดย ${senderName}`;
+    }
+
     // 4.1 กรณี "ตัดหมด 14", "ตัดมัด 14 หมด", "เบิกมัด 14 ทั้งหมด"
     let cutAllMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s*)?(?:ตัด|เบิก)(?:หมด|ทั้งหมด|\s+หมด|\s+ทั้งหมด)?(?:\s*มัด|\s*bdl)?\s*(\d+)(?:\s+(?:หมด|ทั้งหมด))?(?:\s+(.+))?$/i);
-    if (cutAllMatch && (rawText.includes('หมด') || rawText.includes('ทั้งหมด'))) {
+    if (!cutTargetQuery && cutAllMatch && (rawText.includes('หมด') || rawText.includes('ทั้งหมด'))) {
         cutInvoice = cutAllMatch[1] ? cutAllMatch[1].trim() : null;
         cutTargetQuery = `มัด ${cutAllMatch[2].trim()}`;
         cutAll = true;
