@@ -332,19 +332,33 @@ function doPost(e) {
       let pendingCount = 0;
       let excessCount = 0;
       let targetContainerName = "";
+      let targetPlName = "";
+
+      const normalize = (s) => String(s || "").toLowerCase().replace(/[\s\-_]/g, "");
+      const targetInvoiceClean = payload.invoice ? normalize(payload.invoice) : (payload.container ? normalize(payload.container) : "");
 
       for (let i = 1; i < data.length; i++) {
         const row = data[i];
-        const ctn = String(row[colCtn] || "").trim().toLowerCase();
-        const pl = String(row[colPl] || "").trim().toLowerCase();
-        const item = String(row[colItem] || "").trim().toLowerCase();
-        const bdl = String(row[colBdl] || "").trim().toLowerCase();
+        const ctn = String(row[colCtn] || "").trim();
+        const pl = String(row[colPl] || "").trim();
+        const item = String(row[colItem] || "").trim();
+        const bdl = String(row[colBdl] || "").trim();
 
-        if (!targetCtnFilter || ctn.includes(targetCtnFilter) || targetCtnFilter.includes(ctn)) {
-          if (!targetContainerName) targetContainerName = row[colCtn];
+        const plClean = normalize(pl);
+        const ctnClean = normalize(ctn);
+
+        const matchInvoice = targetInvoiceClean
+          ? (plClean.includes(targetInvoiceClean) || ctnClean.includes(targetInvoiceClean))
+          : (pl === activeInfo.activePl || ctn === activeInfo.activeContainer);
+
+        if (matchInvoice) {
+          if (!targetContainerName) {
+            targetContainerName = ctn;
+            targetPlName = pl;
+          }
           const exp = Number(row[colExp]) || 0;
           const rec = Number(row[colRec]) || 0;
-          const cut = cutMap[`${pl}|${ctn}|${item}|${bdl}`] || cutMap[`${item}|${bdl}`] || 0;
+          const cut = cutMap[`${pl.toLowerCase()}|${ctn.toLowerCase()}|${item.toLowerCase()}|${bdl.toLowerCase()}`] || cutMap[`${item.toLowerCase()}|${bdl.toLowerCase()}`] || 0;
 
           totalExpected += exp;
           totalReceived += rec;
@@ -361,7 +375,7 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({
         status: "success",
         container: targetContainerName || activeInfo.activeContainer,
-        plNo: activeInfo.activePl,
+        plNo: targetPlName || activeInfo.activePl,
         totalExpected: totalExpected,
         totalReceived: totalReceived,
         totalBalance: totalExpected - totalReceived,
@@ -656,16 +670,35 @@ function doPost(e) {
     // 5. รายการค้างรับ (Pending List)
     // ==========================================
     if (action === "pending_list") {
+      const normalize = (s) => String(s || "").toLowerCase().replace(/[\s\-_]/g, "");
+      const targetInvoiceClean = payload.invoice ? normalize(payload.invoice) : (payload.container ? normalize(payload.container) : "");
+      let targetContainerName = "";
+      let targetPlName = "";
       const pendingItems = [];
+
       for (let i = 1; i < data.length; i++) {
         const row = data[i];
-        const ctn = String(row[colCtn] || "").trim().toLowerCase();
-        if (!targetCtnFilter || ctn.includes(targetCtnFilter) || targetCtnFilter.includes(ctn)) {
+        const ctn = String(row[colCtn] || "").trim();
+        const pl = String(row[colPl] || "").trim();
+        const plClean = normalize(pl);
+        const ctnClean = normalize(ctn);
+
+        const matchInvoice = targetInvoiceClean
+          ? (plClean.includes(targetInvoiceClean) || ctnClean.includes(targetInvoiceClean))
+          : (pl === activeInfo.activePl || ctn === activeInfo.activeContainer);
+
+        if (matchInvoice) {
+          if (!targetContainerName) {
+            targetContainerName = ctn;
+            targetPlName = pl;
+          }
           const exp = Number(row[colExp]) || 0;
           const rec = Number(row[colRec]) || 0;
           const bal = exp - rec;
           if (bal > 0) {
             pendingItems.push({
+              plNo: pl,
+              container: ctn,
               item: row[colItem],
               bdl: row[colBdl],
               dim: String(row[colDim]),
@@ -676,9 +709,11 @@ function doPost(e) {
           }
         }
       }
+
       return ContentService.createTextOutput(JSON.stringify({
         status: "success",
-        container: activeInfo.activeContainer,
+        container: targetContainerName || activeInfo.activeContainer,
+        plNo: targetPlName || activeInfo.activePl,
         pendingCount: pendingItems.length,
         items: pendingItems
       })).setMimeType(ContentService.MimeType.JSON);

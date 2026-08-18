@@ -212,77 +212,83 @@ async function askGemini(userQuestion) {
     try {
         const gasStatus = await getCachedStatus();
         const rows = gasStatus.rows || [];
-        const activeContainer = gasStatus.activeContainer || 'BEAU 5231653/ID48136AA';
-        const activePl = gasStatus.activePl || 'PL- 25/ASN/TM/VII/26';
+        const activeContainer = gasStatus.activeContainer || 'TRHU 5939460/ID49590AA';
+        const activePl = gasStatus.activePl || 'PL-28/ASN/TM/VII/26';
 
-        // Pre-calculate exact statistical totals from rows
-        let totalExpected = 0;
-        let totalReceived = 0;
-        let totalCut = 0;
-        let pendingRows = [];
-        let completedRows = [];
+        // Pre-calculate per-container totals
+        const containerSummaries = {};
+        let grandExpected = 0;
+        let grandReceived = 0;
+        let grandCut = 0;
 
         rows.forEach(r => {
+            const pl = r.plNo || 'Unknown';
+            if (!containerSummaries[pl]) {
+                containerSummaries[pl] = {
+                    pl: pl,
+                    container: r.container,
+                    expected: 0,
+                    received: 0,
+                    cut: 0,
+                    pendingItems: 0,
+                    completedItems: 0
+                };
+            }
             const exp = Number(r.expQty) || 0;
             const rec = Number(r.recQty) || 0;
             const cut = Number(r.cutQty) || 0;
-            totalExpected += exp;
-            totalReceived += rec;
-            totalCut += cut;
+
+            containerSummaries[pl].expected += exp;
+            containerSummaries[pl].received += rec;
+            containerSummaries[pl].cut += cut;
+
+            grandExpected += exp;
+            grandReceived += rec;
+            grandCut += cut;
+
             if (exp > rec) {
-                pendingRows.push(r);
+                containerSummaries[pl].pendingItems++;
             } else {
-                completedRows.push(r);
+                containerSummaries[pl].completedItems++;
             }
         });
 
-        const totalPendingBalance = Math.max(0, totalExpected - totalReceived);
-        const availableStockInWarehouse = Math.max(0, totalReceived - totalCut);
+        let summaryTextPrompt = '';
+        Object.keys(containerSummaries).forEach(plKey => {
+            const s = containerSummaries[plKey];
+            const pendingBal = Math.max(0, s.expected - s.received);
+            const availStock = Math.max(0, s.received - s.cut);
+            summaryTextPrompt += `\n📦 ตู้ ${s.pl} (${s.container}):\n` +
+                                 `• ยอดตาม Packing List: ${s.expected.toLocaleString()} PCS\n` +
+                                 `• ยอดรับเข้าคลังแล้ว: ${s.received.toLocaleString()} PCS\n` +
+                                 `• ยอดค้างรับคงเหลือ: ${pendingBal.toLocaleString()} PCS\n` +
+                                 `• ยอดตัดไม้ออกไปแล้ว: ${s.cut.toLocaleString()} PCS\n` +
+                                 `• ยอดไม้คงเหลือพร้อมใช้ในคลัง: ${availStock.toLocaleString()} PCS\n` +
+                                 `• รายการรับครบแล้ว: ${s.completedItems} รายการ | ค้างรับ: ${s.pendingItems} รายการ\n`;
+        });
 
-        const summaryInfo = {
-            activeContainer: activeContainer,
-            activePl: activePl,
-            officialTotals: {
-                totalExpectedPCS: totalExpected,
-                totalReceivedPCS: totalReceived,
-                totalPendingBalancePCS: totalPendingBalance,
-                totalCutPCS: totalCut,
-                availableStockInWarehousePCS: availableStockInWarehouse,
-                pendingItemsCount: pendingRows.length,
-                completedItemsCount: completedRows.length
-            },
-            inventoryData: rows.map(r => ({
-                pl: r.plNo,
-                container: r.container,
-                item: r.item,
-                bdl: r.bdl,
-                dim: r.dim,
-                expQty: r.expQty,
-                recQty: r.recQty,
-                balQty: r.balQty,
-                cutQty: r.cutQty,
-                availStock: r.availStock,
-                status: r.status
-            }))
-        };
+        const grandPending = Math.max(0, grandExpected - grandReceived);
+        const grandAvail = Math.max(0, grandReceived - grandCut);
 
         const systemPrompt = `คุณคือผู้ช่วย AI อัจฉริยะประจำระบบคลังไม้และการตรวจรับไม้ (Wood Inventory & Cutting Assistant)
 หน้าที่ของคุณคือตอบคำถามของผู้ใช้งานเกี่ยวกับสถานะไม้ในตู้คอนเทนเนอร์ (Packing List) และยอดการตัดไม้ในคลัง
 
-📊 ข้อมูลสรุปตัวเลขทางการแบบ Real-time ของตู้ ${activeContainer} (${activePl}):
-• ยอดทั้งหมดตาม Packing List: ${totalExpected.toLocaleString()} PCS
-• ยอดรับเข้าคลังแล้วรวม: ${totalReceived.toLocaleString()} PCS
-• ยอดค้างรับรวม (คงเหลือที่ต้องเข้าตู้): ${totalPendingBalance.toLocaleString()} PCS
-• ยอดตัดไม้ออกไปใช้งานแล้ว: ${totalCut.toLocaleString()} PCS
-• ยอดไม้คงเหลือพร้อมใช้ในคลังจริง: ${availableStockInWarehouse.toLocaleString()} PCS
-• จำนวนรายการที่รับครบแล้ว: ${completedRows.length} รายการ
-• จำนวนรายการที่ยังค้างรับ: ${pendingRows.length} รายการ
+📊 ข้อมูลสรุปตัวเลขทางการแบบ Real-time แยกรายตู้ (ใช้ตัวเลขนี้ตอบเสมอ ห้ามคำนวณใหม่เอง):
+${summaryTextPrompt}
+🌐 ภาพรวมทุกตู้ในคลังทั้งหมด (Grand Total):
+• ยอดไม้ตามตู้รวมทั้งหมด: ${grandExpected.toLocaleString()} PCS
+• ยอดรับเข้าคลังแล้วรวม: ${grandReceived.toLocaleString()} PCS
+• ยอดค้างรับรวมทุกตู้: ${grandPending.toLocaleString()} PCS
+• ยอดตัดไม้รวมทุกตู้: ${grandCut.toLocaleString()} PCS
+• ไม้คงเหลือพร้อมใช้รวมทั้งคลัง: ${grandAvail.toLocaleString()} PCS
+
+ตู้ Active ที่กำลังเปิดตรวจรับปัจจุบัน: ${activePl} (${activeContainer})
 
 กฎการตอบคำถาม:
 1. ตอบเป็นภาษาไทยอย่างสุภาพ กระชับ ชัดเจน และตรงประเด็น
-2. หากผู้ใช้ถามยอดรวม เช่น "ค้างรับกี่ชิ้น", "เหลือกี่ชิ้น", "รับแล้วเท่าไหร่" ให้ใช้ตัวเลขทางการด้านบนเสมอ (ยอดค้างรับรวม = ${totalPendingBalance.toLocaleString()} PCS) ห้ามบวกเลขเองใหม่
+2. หากผู้ใช้ถามถึงตู้ใด ให้ดึงตัวเลขของตู้นั้นจากรายการด้านบนไปตอบอย่างแม่นยำ
 3. จัดรูปแบบข้อความด้วย Markdown ของ WhatsApp เช่น ใช้ *ตัวหนา*, อิโมจิ 🪵, 📦, 📊, ✂️, ✅, ⏳
-4. หากผู้ใช้ถามเจาะจงเฉพาะ Part หรือ เฉพาะมัด ให้ดูจากรายการด้านล่าง`;
+4. หากผู้ใช้ถามเจาะจงเฉพาะ Part หรือ เฉพาะมัด ให้ดูจากข้อมูลรายการด้านล่าง`;
 
         // Try models with fallback: gemini-2.5-flash -> gemini-2.0-flash
         const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash'];
@@ -293,9 +299,11 @@ async function askGemini(userQuestion) {
                 const response = await ai.models.generateContent({
                     model: modelName,
                     contents: [
-                        { role: 'user', parts: [{ text: `${systemPrompt}\n\nข้อมูลสต็อก:\n${JSON.stringify(summaryInfo)}\n\nคำถามจากผู้ใช้: "${userQuestion}"` }] }
+                        { role: 'user', parts: [{ text: `${systemPrompt}\n\nรายการไม้ทั้งหมดในระบบ:\n${JSON.stringify(rows.map(r => ({ pl: r.plNo, bdl: r.bdl, item: r.item, dim: r.dim, exp: r.expQty, rec: r.recQty, bal: r.balQty, cut: r.cutQty, avail: r.availStock, status: r.status })))}` }] },
+                        { role: 'user', parts: [{ text: userQuestion }] }
                     ]
                 });
+
                 if (response && response.text) {
                     return response.text.trim();
                 }
@@ -358,7 +366,7 @@ async function processMessage(msg) {
                          `*[ 1 ]* 📊 *ดูสรุปยอดตู้ปัจจุบัน* ➔ พิมพ์ \`1\` หรือ \`สรุป\`\n` +
                          `*[ 2 ]* ⏳ *ดูรายการมัดที่ยังไม่ครบ* ➔ พิมพ์ \`2\` หรือ \`ค้างรับ\`\n` +
                          `*[ 3 ]* 🔍 *เช็คข้อมูลมัดไม้* ➔ พิมพ์ \`มัด [เลข]\` เช่น \`มัด 8\`\n` +
-                         `*[ 4 ]* 📥 *บันทึกรับไม้เข้า* ➔ พิมพ์ \`มัด [เลข] [ยอด]\` เช่น \`มัด 24 1592\`\n` +
+                         `*[ 4 ]* 📥 *บันทึกรับไม้เข้า* ➔ พิมพ์ \`[เลข IV] มัด [เลข] [ยอด]\` เช่น \`PL28 มัด 1 1266\`\n` +
                          `*[ 5 ]* ✂️ *บันทึกตัดไม้ออก* ➔ พิมพ์ \`[เลข IV] ตัด [Part/มัด] [ยอด]\`\n` +
                          `      • ตัดตาม Part (FIFO): \`PL25 ตัด 8156585 750\`\n` +
                          `      • ตัดตามมัด: \`PL25 มัด 8 ตัด 750\`\n` +
@@ -379,17 +387,24 @@ async function processMessage(msg) {
     }
 
     // ====================================================
-    // 2. สรุปภาพรวมตู้ & คำถามยอดค้างรับภาษาคน
-    // รูปแบบ: "1", "สรุป", "สถานะ", "Iv PL25 ยังค้างรับกี่ชิ้น", "ค้างรับกี่ชิ้น", "เหลือกี่ชิ้น", "เหลือเท่าไหร่"
+    // 2. สรุปภาพรวมตู้ & คำถามยอดค้างรับภาษาคน (Fast Local Math Path)
+    // รูปแบบ: "1", "สรุป", "สรุป PL25", "PL25 สรุป", "Iv PL25 ยอดค้างรับกี่ชิ้น", "ค้างรับกี่ชิ้น", "เหลือกี่ชิ้น"
     // ====================================================
+    let summaryInvoice = null;
+    const invMatch = rawText.match(/(?:PL|IV)\s*[-_]?\s*([0-9]{1,3})/i);
+    if (invMatch) {
+        summaryInvoice = `PL${invMatch[1]}`;
+    }
+
     const isSummaryIntent = cleanText === '1' || 
-                            ['!สรุป', '!status', '!summary', 'สรุป', 'status', 'summary', 'รายงาน'].includes(cleanText) ||
+                            ['!สรุป', '!status', '!summary', 'สรุป', 'status', 'summary', 'รายงาน', 'สรุปตู้'].includes(cleanText) ||
+                            cleanText.startsWith('สรุป pl') || (cleanText.startsWith('pl') && cleanText.includes('สรุป')) ||
                             (cleanText.includes('ค้างรับ') && (cleanText.includes('กี่') || cleanText.includes('เท่าไหร่') || cleanText.includes('ยอด') || cleanText.includes('รวม'))) ||
                             (cleanText.includes('เหลือ') && cleanText.includes('ชิ้น')) ||
                             (cleanText.includes('เหลือ') && cleanText.includes('เท่าไหร่'));
 
     if (isSummaryIntent) {
-        const res = await callGAS({ action: 'summary' });
+        const res = await callGAS({ action: 'summary', invoice: summaryInvoice });
         if (res && res.status === 'success' && res.totalExpected !== undefined) {
             const exp = Number(res.totalExpected) || 0;
             const rec = Number(res.totalReceived) || 0;
@@ -400,7 +415,7 @@ async function processMessage(msg) {
             const comp = res.completedCount || 0;
             const pend = res.pendingCount || 0;
             const ctn = res.container || 'BEAU 5231653';
-            const pl = res.plNo || 'PL-25';
+            const pl = res.plNo || (summaryInvoice ? summaryInvoice.toUpperCase() : 'ตู้ปัจจุบัน');
 
             const summaryText = `📊 *สรุปสถานะตู้: ${ctn} (${pl})*\n` +
                                 `━━━━━━━━━━━━━━━━━━━\n` +
@@ -426,7 +441,7 @@ async function processMessage(msg) {
                             (cleanText.includes('part') && (cleanText.includes('เหลือ') || cleanText.includes('ค้าง') || cleanText.includes('อะไร')));
 
     if (isPendingIntent) {
-        const res = await callGAS({ action: 'pending_list' });
+        const res = await callGAS({ action: 'pending_list', invoice: summaryInvoice });
         if (res && res.status === 'success') {
             const items = res.items || [];
             if (items.length === 0) {
