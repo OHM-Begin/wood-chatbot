@@ -404,36 +404,65 @@ async function processMessage(msg) {
                             (cleanText.includes('เหลือ') && cleanText.includes('เท่าไหร่'));
 
     if (isSummaryIntent) {
-        const res = await callGAS({ action: 'summary', invoice: summaryInvoice });
-        if (res && res.status === 'success' && res.totalExpected !== undefined) {
-            const exp = Number(res.totalExpected) || 0;
-            const rec = Number(res.totalReceived) || 0;
-            const bal = Number(res.totalBalance) || 0;
-            const cut = Number(res.totalCut) || 0;
-            const avail = Number(res.availableStock) || 0;
-            const pct = res.percent || '0';
-            const comp = res.completedCount || 0;
-            const pend = res.pendingCount || 0;
-            const ctn = res.container || 'BEAU 5231653';
-            const pl = res.plNo || (summaryInvoice ? summaryInvoice.toUpperCase() : 'ตู้ปัจจุบัน');
+        const gasStatus = await getCachedStatus();
+        const rows = gasStatus.rows || [];
+        const activeContainer = gasStatus.activeContainer || 'TRHU 5939460/ID49590AA';
+        const activePl = gasStatus.activePl || 'PL-28/ASN/TM/VII/26';
 
-            const summaryText = `📊 *สรุปสถานะตู้: ${ctn} (${pl})*\n` +
-                                `━━━━━━━━━━━━━━━━━━━\n` +
-                                `⏳ *ยอดค้างรับคงเหลือในตู้:* *${bal.toLocaleString()} PCS*\n` +
-                                `📥 *รับเข้าคลังแล้ว:* ${rec.toLocaleString()} / ${exp.toLocaleString()} PCS (${pct}%)\n` +
-                                `🪵 *ไม้คงเหลือพร้อมใช้ในคลัง:* *${avail.toLocaleString()} PCS*\n` +
-                                `✂️ *ตัดไม้ออกไปแล้ว:* ${cut.toLocaleString()} PCS\n` +
-                                `───────────────────\n` +
-                                `✅ *รับครบแล้ว:* ${comp} รายการ | ⏳ *ยังรอรับ:* ${pend} รายการ\n` +
-                                `━━━━━━━━━━━━━━━━━━━`;
-            return sendReply(msg, summaryText);
+        const normalize = (s) => String(s || '').toLowerCase().replace(/[\s\-_]/g, '');
+        const targetClean = summaryInvoice ? normalize(summaryInvoice) : '';
+
+        let targetRows = rows;
+        let ctnTitle = activeContainer;
+        let plTitle = activePl;
+
+        if (targetClean) {
+            targetRows = rows.filter(r => normalize(r.plNo).includes(targetClean) || normalize(r.container).includes(targetClean));
+            if (targetRows.length > 0) {
+                ctnTitle = targetRows[0].container;
+                plTitle = targetRows[0].plNo;
+            }
+        } else if (!cleanText.includes('ทั้งหมด') && !cleanText.includes('รวม')) {
+            targetRows = rows.filter(r => r.plNo === activePl || r.container === activeContainer);
         } else {
-            return sendReply(msg, `❌ ไม่สามารถดึงข้อมูลสรุปได้: ${res.message || 'โปรดตรวจสอบการเชื่อมต่อ'}`);
+            ctnTitle = 'ทุกตู้ในคลัง (Grand Total)';
+            plTitle = 'รวมทุก Invoice';
         }
+
+        if (targetRows.length === 0) {
+            return sendReply(msg, `❌ ไม่พบข้อมูลตู้ ${summaryInvoice || ''} ในระบบครับ`);
+        }
+
+        let exp = 0, rec = 0, cut = 0, comp = 0, pend = 0;
+        targetRows.forEach(r => {
+            const e = Number(r.expQty) || 0;
+            const rc = Number(r.recQty) || 0;
+            const ct = Number(r.cutQty) || 0;
+            exp += e;
+            rec += rc;
+            cut += ct;
+            if (e > rc) pend++;
+            else if (e > 0) comp++;
+        });
+
+        const bal = Math.max(0, exp - rec);
+        const avail = Math.max(0, rec - cut);
+        const pct = exp > 0 ? ((rec / exp) * 100).toFixed(1) : '0.0';
+
+        const summaryText = `📊 *สรุปสถานะตู้: ${ctnTitle} (${plTitle})*\n` +
+                            `━━━━━━━━━━━━━━━━━━━\n` +
+                            `⏳ *ยอดค้างรับคงเหลือในตู้:* *${bal.toLocaleString()} PCS*\n` +
+                            `📥 *รับเข้าคลังแล้ว:* ${rec.toLocaleString()} / ${exp.toLocaleString()} PCS (${pct}%)\n` +
+                            `🪵 *ไม้คงเหลือพร้อมใช้ในคลัง:* *${avail.toLocaleString()} PCS*\n` +
+                            `✂️ *ตัดไม้ออกไปแล้ว:* ${cut.toLocaleString()} PCS\n` +
+                            `───────────────────\n` +
+                            `✅ *รับครบแล้ว:* ${comp} รายการ | ⏳ *ยังรอรับ:* ${pend} รายการ\n` +
+                            `━━━━━━━━━━━━━━━━━━━`;
+        return sendReply(msg, summaryText);
     }
 
     // ====================================================
-    // 3. รายการที่ยังค้างรับ (Pending Items List & "เหลือ Part อะไรบ้าง")
+    // 3. รายการที่ยังค้างรับ (Pending Items List)
     // รูปแบบ: "2", "ค้างรับ", "ยังไม่ครบ", "รอรับ", "เหลือ Part อะไรบ้าง", "มี Part อะไรบ้าง"
     // ====================================================
     const isPendingIntent = cleanText === '2' ||
@@ -441,27 +470,45 @@ async function processMessage(msg) {
                             (cleanText.includes('part') && (cleanText.includes('เหลือ') || cleanText.includes('ค้าง') || cleanText.includes('อะไร')));
 
     if (isPendingIntent) {
-        const res = await callGAS({ action: 'pending_list', invoice: summaryInvoice });
-        if (res && res.status === 'success') {
-            const items = res.items || [];
-            if (items.length === 0) {
-                return sendReply(msg, `🎉 *ยินดีด้วยครับ! ตู้ ${res.container} รับไม้ครบถ้วน 100% แล้วทุกรายการ*`);
-            }
+        const gasStatus = await getCachedStatus();
+        const rows = gasStatus.rows || [];
+        const activeContainer = gasStatus.activeContainer || 'TRHU 5939460/ID49590AA';
+        const activePl = gasStatus.activePl || 'PL-28/ASN/TM/VII/26';
 
-            let pendingReply = `⏳ *รายการไม้ที่ยังรอรับเข้าตู้: ${res.container} (${items.length} รายการ)*\n` +
-                               `━━━━━━━━━━━━━━━━━━━\n`;
-            
-            items.slice(0, 15).forEach(it => {
-                pendingReply += `• *Part ${it.item}* (มัด ${it.bdl}): ขาดอีก *${Number(it.balQty).toLocaleString()}* PCS [ขนาด: ${it.dim}]\n`;
-            });
+        const normalize = (s) => String(s || '').toLowerCase().replace(/[\s\-_]/g, '');
+        const targetClean = summaryInvoice ? normalize(summaryInvoice) : '';
 
-            if (items.length > 15) {
-                pendingReply += `*(และอีก ${items.length - 15} รายการ... พิมพ์ "มัด [เลข]" เพื่อดูเฉพาะมัดได้ครับ)*\n`;
-            }
-            pendingReply += `━━━━━━━━━━━━━━━━━━━\n` +
-                            `💡 *พิมพ์ "1" เพื่อดูยอดรวมทั้งหมด*`;
-            return sendReply(msg, pendingReply);
+        let targetRows = rows;
+        let ctnTitle = activeContainer;
+
+        if (targetClean) {
+            targetRows = rows.filter(r => normalize(r.plNo).includes(targetClean) || normalize(r.container).includes(targetClean));
+            if (targetRows.length > 0) ctnTitle = targetRows[0].container;
+        } else {
+            targetRows = rows.filter(r => r.plNo === activePl || r.container === activeContainer);
         }
+
+        const pendingItems = targetRows.filter(r => (Number(r.expQty) || 0) > (Number(r.recQty) || 0));
+
+        if (pendingItems.length === 0) {
+            return sendReply(msg, `🎉 *ยินดีด้วยครับ! ตู้ ${ctnTitle} รับไม้ครบถ้วน 100% แล้วทุกรายการ*`);
+        }
+
+        let pendingReply = `⏳ *รายการไม้ที่ยังรอรับเข้าตู้: ${ctnTitle} (${pendingItems.length} รายการ)*\n` +
+                           `━━━━━━━━━━━━━━━━━━━\n`;
+        
+        pendingItems.slice(0, 15).forEach(it => {
+            const exp = Number(it.expQty) || 0;
+            const rec = Number(it.recQty) || 0;
+            pendingReply += `• *Part ${it.item}* (มัด ${it.bdl}): ขาดอีก *${(exp - rec).toLocaleString()}* PCS [ขนาด: ${it.dim}]\n`;
+        });
+
+        if (pendingItems.length > 15) {
+            pendingReply += `*(และอีก ${pendingItems.length - 15} รายการ... พิมพ์ "มัด [เลข]" เพื่อดูเฉพาะมัดได้ครับ)*\n`;
+        }
+        pendingReply += `━━━━━━━━━━━━━━━━━━━\n` +
+                        `💡 *พิมพ์ "1" เพื่อดูยอดรวมทั้งหมด*`;
+        return sendReply(msg, pendingReply);
     }
 
     // ====================================================
