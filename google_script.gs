@@ -10,10 +10,108 @@ function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu("🪵 ระบบ Packing List & ตัดไม้")
     .addItem("📊 สร้าง/อัปเดตหน้า Dashboard", "buildDashboardSheet")
+    .addItem("🔄 อัปเดตคอลัมน์สต็อก & วงจรไม้ (Packing List)", "upgradePackingListSheet")
     .addItem("📥 นำเข้าข้อมูลตู้ PL-28 (37 มัด)", "importPL28Directly")
     .addItem("➕ สร้างแท็บ 'ตัดไม้' (ถ้ายังไม่มี)", "ensureCuttingSheetExists")
     .addItem("🔄 รีเซ็ตยอดรับเข้าทั้งหมด (เฉพาะชีต Packing List)", "resetReceivedQuantities")
     .addToUi();
+}
+
+/**
+ * อัปเกรดคอลัมน์และสูตรในชีต Packing List ให้แสดงสถานะวงจรไม้ และยอดคงเหลือพร้อมใช้จริง (Lifecycle & Stock Visibility)
+ */
+function upgradePackingListSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(SHEET_PACKING_LIST);
+  if (!sheet) {
+    SpreadsheetApp.getUi().alert(`❌ ไม่พบแท็บ "${SHEET_PACKING_LIST}" ใน Google Sheet`);
+    return;
+  }
+
+  // 1. ตั้งชื่อหัวคอลัมน์ (Headers A1:O1)
+  const headers = [
+    "ลำดับ",
+    "วันที่",
+    "เลขที่ PL (Packing No.)",
+    "เลขตู้ (Container No.)",
+    "No. Item (Part Number)",
+    "No. BDL (มัดที่)",
+    "ขนาด / Description (MM)",
+    "ยอดตาม PL (PCS)",
+    "ปริมาตร (M³)",
+    "ยอดรับเข้าแล้ว (PCS)",
+    "ยอดค้างรับในตู้ (PCS)",
+    "สถานะวงจรไม้ (Lifecycle)",
+    "อัปเดตล่าสุด",
+    "ยอดตัดสะสม (PCS)",
+    "คงเหลือพร้อมใช้จริง (PCS)"
+  ];
+
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers])
+       .setBackground("#0f172a")
+       .setFontColor("#ffffff")
+       .setFontWeight("bold")
+       .setHorizontalAlignment("center")
+       .setVerticalAlignment("middle");
+  sheet.setRowHeight(1, 35);
+
+  // ตกแต่งหัวคอลัมน์ N & O ให้เด่นด้วยสีเขียวเข้มสต็อก
+  sheet.getRange("N1:O1").setBackground("#065f46").setFontColor("#ffffff");
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow >= 2) {
+    const numRows = lastRow - 1;
+
+    // 2. ใส่สูตรคำนวณอัตโนมัติ
+    // คอลัมน์ K (ยอดค้างรับ): =IF(ISBLANK(C2), "", MAX(0, H2-J2))
+    // คอลัมน์ N (ยอดตัดสะสม): =IF(ISBLANK(C2), "", SUMIFS('ตัดไม้'!$H:$H, 'ตัดไม้'!$C:$C, C2, 'ตัดไม้'!$E:$E, E2, 'ตัดไม้'!$F:$F, F2))
+    // คอลัมน์ O (คงเหลือพร้อมใช้จริง): =IF(ISBLANK(C2), "", MAX(0, J2-N2))
+    // คอลัมน์ L (สถานะวงจรไม้): =IF(ISBLANK(C2), "", IF(J2=0, "⏳ ยังไม่รับ", IF(O2=0, "⚪ ตัดหมดแล้ว", IF(N2>0, "🪵 กำลังตัดใช้", IF(J2=H2, "🟢 รับครบพร้อมใช้", IF(J2>H2, "⚠️ รับเกิน", "🟡 รับบางส่วน"))))))
+
+    const formulasK = [];
+    const formulasL = [];
+    const formulasN = [];
+    const formulasO = [];
+
+    for (let r = 2; r <= lastRow; r++) {
+      formulasK.push([`=IF(ISBLANK(C${r}), "", MAX(0, H${r}-J${r}))`]);
+      formulasN.push([`=IF(ISBLANK(C${r}), "", SUMIFS('ตัดไม้'!$H:$H, 'ตัดไม้'!$C:$C, C${r}, 'ตัดไม้'!$E:$E, E${r}, 'ตัดไม้'!$F:$F, F${r}))`]);
+      formulasO.push([`=IF(ISBLANK(C${r}), "", MAX(0, J${r}-N${r}))`]);
+      formulasL.push([`=IF(ISBLANK(C${r}), "", IF(J${r}=0, "⏳ ยังไม่รับ", IF(O${r}=0, "⚪ ตัดหมดแล้ว", IF(N${r}>0, "🪵 กำลังตัดใช้", IF(J${r}=H${r}, "🟢 รับครบพร้อมใช้", IF(J${r}>H${r}, "⚠️ รับเกิน", "🟡 รับบางส่วน"))))))`]);
+    }
+
+    sheet.getRange(2, 11, numRows, 1).setFormulas(formulasK).setHorizontalAlignment("right").setNumberFormat("#,##0");
+    sheet.getRange(2, 14, numRows, 1).setFormulas(formulasN).setHorizontalAlignment("right").setNumberFormat("#,##0").setFontColor("#e11d48").setFontWeight("bold");
+    sheet.getRange(2, 15, numRows, 1).setFormulas(formulasO).setHorizontalAlignment("right").setNumberFormat("#,##0").setFontColor("#059669").setFontWeight("bold");
+    sheet.getRange(2, 12, numRows, 1).setFormulas(formulasL).setHorizontalAlignment("center").setFontWeight("bold");
+
+    sheet.getRange(2, 8, numRows, 1).setNumberFormat("#,##0").setHorizontalAlignment("right");
+    sheet.getRange(2, 9, numRows, 1).setNumberFormat("#,##0.000").setHorizontalAlignment("right");
+    sheet.getRange(2, 10, numRows, 1).setNumberFormat("#,##0").setHorizontalAlignment("right");
+  }
+
+  // ปรับความกว้างคอลัมน์
+  sheet.setColumnWidth(1, 45);   // ลำดับ
+  sheet.setColumnWidth(2, 95);   // วันที่
+  sheet.setColumnWidth(3, 170);  // PL
+  sheet.setColumnWidth(4, 180);  // Container
+  sheet.setColumnWidth(5, 120);  // Item
+  sheet.setColumnWidth(6, 65);   // BDL
+  sheet.setColumnWidth(7, 180);  // Dim
+  sheet.setColumnWidth(8, 110);  // PL Qty
+  sheet.setColumnWidth(9, 90);   // Vol
+  sheet.setColumnWidth(10, 110); // Rec Qty
+  sheet.setColumnWidth(11, 110); // Bal Qty
+  sheet.setColumnWidth(12, 160); // Status Lifecycle
+  sheet.setColumnWidth(13, 150); // Updated At
+  sheet.setColumnWidth(14, 120); // Cut Total
+  sheet.setColumnWidth(15, 140); // Available Stock
+
+  // Freeze Header & Columns
+  sheet.setFrozenRows(1);
+  sheet.setFrozenColumns(6);
+
+  SpreadsheetApp.getUi().alert("✅ อัปเกรดคอลัมน์ Packing List สำเร็จ!\n• เพิ่มคอลัมน์ N (ยอดตัดสะสม) และ O (คงเหลือพร้อมใช้จริง)\n• เชื่อมต่อสถานะวงจรไม้ '⚪ ตัดหมดแล้ว' ในคอลัมน์ L เรียบร้อยแล้ว!");
 }
 
 /**
