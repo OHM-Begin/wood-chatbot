@@ -453,15 +453,29 @@ async function processMessage(msg) {
         }
 
         let exp = 0, rec = 0, cut = 0, comp = 0, pend = 0;
+        let expVol = 0, availVol = 0, cutVol = 0;
         targetRows.forEach(r => {
             const e = Number(r.expQty) || 0;
             const rc = Number(r.recQty) || 0;
             const ct = Number(r.cutQty) || 0;
+            const t = Number(r.thick) || 0;
+            const w = Number(r.width) || 0;
+            const l = Number(r.length) || 0;
+
             exp += e;
             rec += rc;
             cut += ct;
             if (e > rc) pend++;
             else if (e > 0) comp++;
+
+            if (t > 0 && w > 0 && l > 0) {
+                expVol += (t * w * l * e) / 1000000000;
+                cutVol += (t * w * l * ct) / 1000000000;
+                availVol += (t * w * l * Math.max(0, rc - ct)) / 1000000000;
+            } else {
+                expVol += Number(r.volExpM3) || 0;
+                availVol += Number(r.volAvailM3) || 0;
+            }
         });
 
         const bal = Math.max(0, exp - rec);
@@ -472,8 +486,8 @@ async function processMessage(msg) {
                             `━━━━━━━━━━━━━━━━━━━\n` +
                             `⏳ *ยอดค้างรับคงเหลือในตู้:* *${bal.toLocaleString()} PCS*\n` +
                             `📥 *รับเข้าคลังแล้ว:* ${rec.toLocaleString()} / ${exp.toLocaleString()} PCS (${pct}%)\n` +
-                            `🪵 *ไม้คงเหลือพร้อมใช้ในคลัง:* *${avail.toLocaleString()} PCS*\n` +
-                            `✂️ *ตัดไม้ออกไปแล้ว:* ${cut.toLocaleString()} PCS\n` +
+                            `🪵 *ไม้คงเหลือพร้อมใช้ในคลัง:* *${avail.toLocaleString()} PCS* ${availVol > 0 ? `(${availVol.toFixed(3)} M³)` : ''}\n` +
+                            `✂️ *ตัดไม้ออกไปแล้ว:* ${cut.toLocaleString()} PCS ${cutVol > 0 ? `(${cutVol.toFixed(3)} M³)` : ''}\n` +
                             `───────────────────\n` +
                             `✅ *รับครบแล้ว:* ${comp} รายการ | ⏳ *ยังรอรับ:* ${pend} รายการ\n` +
                             `━━━━━━━━━━━━━━━━━━━`;
@@ -609,16 +623,20 @@ async function processMessage(msg) {
 
         if (res && res.status === 'success') {
             let replyText = '';
+            const cutVolStr = res.totalCutVolM3 > 0 ? ` (${res.totalCutVolM3.toFixed(3)} M³)` : (res.cutVol > 0 ? ` (${res.cutVol.toFixed(3)} M³)` : '');
+            const availVolStr = res.availVol > 0 ? ` (${res.availVol.toFixed(3)} M³)` : '';
+
             if (res.isFifo && res.deductions && res.deductions.length > 1) {
                 replyText = `✂️ *บันทึกตัดไม้สำเร็จ (ระบบตัดแบบ FIFO ไล่มัดแรก)*\n` +
                             `━━━━━━━━━━━━━━━━━━━\n` +
                             `🏷️ *Part Number:* ${res.item}\n` +
                             `🪵 *ขนาด:* ${res.dim}\n` +
-                            `🔻 *ยอดตัดรวมรอบนี้:* -${Number(res.totalCutQty).toLocaleString()} PCS\n` +
+                            `🔻 *ยอดตัดรวมรอบนี้:* -${Number(res.totalCutQty).toLocaleString()} PCS${cutVolStr}\n` +
                             `───────────────────\n` +
                             `📋 *รายละเอียดการตัดแยกมัด:*\n`;
                 res.deductions.forEach(d => {
-                    replyText += `• *มัด ${d.bdl}:* ตัดออก ${Number(d.cutQty).toLocaleString()} PCS (คงเหลือมัดนี้ ${Number(d.newAvail).toLocaleString()} PCS)\n`;
+                    const dVol = d.cutVol > 0 ? ` (${d.cutVol.toFixed(3)} M³)` : '';
+                    replyText += `• *มัด ${d.bdl}:* ตัดออก ${Number(d.cutQty).toLocaleString()} PCS${dVol} (คงเหลือมัดนี้ ${Number(d.newAvail).toLocaleString()} PCS)\n`;
                 });
                 replyText += `───────────────────\n` +
                              `🪵 *ยอดคงเหลือ Part นี้ในคลังทั้งหมด:* *${Number(res.totalPartRemaining).toLocaleString()} PCS*\n` +
@@ -630,8 +648,8 @@ async function processMessage(msg) {
                             `🏷️ *Part:* ${res.item} (มัดที่: ${res.bdl})\n` +
                             `🪵 *ขนาด:* ${res.dim}\n` +
                             `📋 *Invoice:* ${res.plNo}\n` +
-                            `🔻 *ตัดออกรอบนี้:* -${Number(res.cutQty || res.totalCutQty).toLocaleString()} PCS\n` +
-                            `🪵 *คงเหลือพร้อมใช้ในคลัง:* *${Number(res.availStock).toLocaleString()} PCS*\n` +
+                            `🔻 *ตัดออกรอบนี้:* -${Number(res.cutQty || res.totalCutQty).toLocaleString()} PCS${cutVolStr}\n` +
+                            `🪵 *คงเหลือพร้อมใช้ในคลัง:* *${Number(res.availStock).toLocaleString()} PCS*${availVolStr}\n` +
                             `👤 *หมายเหตุ:* ${res.note || '-'}\n` +
                             `━━━━━━━━━━━━━━━━━━━`;
             }
