@@ -709,27 +709,6 @@ function doPost(e) {
         percent: totalExpected > 0 ? ((totalReceived / totalExpected) * 100).toFixed(1) : "0.0"
       })).setMimeType(ContentService.MimeType.JSON);
     }
-          else pendingCount++;
-        }
-      }
-
-      const availableInWarehouse = totalReceived - totalCut;
-
-      return ContentService.createTextOutput(JSON.stringify({
-        status: "success",
-        container: targetContainerName || activeInfo.activeContainer,
-        plNo: targetPlName || activeInfo.activePl,
-        totalExpected: totalExpected,
-        totalReceived: totalReceived,
-        totalBalance: totalExpected - totalReceived,
-        totalCut: totalCut,
-        availableStock: availableInWarehouse,
-        completedCount: completedCount,
-        pendingCount: pendingCount,
-        excessCount: excessCount,
-        percent: totalExpected > 0 ? ((totalReceived / totalExpected) * 100).toFixed(1) : "0.0"
-      })).setMimeType(ContentService.MimeType.JSON);
-    }
 
     // ==========================================
     // 2. ค้นหา (Search)
