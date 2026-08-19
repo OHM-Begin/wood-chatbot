@@ -205,15 +205,21 @@ let lastCacheTime = 0;
 
 async function getCachedStatus() {
     const now = Date.now();
-    if (statusCache && (now - lastCacheTime < 2000)) {
+    if (statusCache && (now - lastCacheTime < 3000)) {
         return statusCache;
     }
     const gasStatus = await callGAS({ action: 'get_all_status' });
-    if (gasStatus && gasStatus.status === 'success') {
+    if (gasStatus && gasStatus.status === 'success' && Array.isArray(gasStatus.rows) && gasStatus.rows.length > 0) {
         statusCache = gasStatus;
         lastCacheTime = now;
+        return gasStatus;
     }
-    return gasStatus;
+    // If GAS call failed, fallback to previous valid cache
+    if (statusCache && Array.isArray(statusCache.rows) && statusCache.rows.length > 0) {
+        console.warn('⚠️ GAS failed, using last known statusCache fallback.');
+        return statusCache;
+    }
+    return gasStatus || { status: 'error', message: 'ไม่สามารถเชื่อมต่อฐานข้อมูลได้' };
 }
 
 // 7. Gemini AI Question Answerer with multi-model fallback & rate-limit handling
@@ -414,7 +420,11 @@ async function processMessage(msg) {
 
     if (isSummaryIntent) {
         const gasStatus = await getCachedStatus();
-        const rows = gasStatus.rows || [];
+        const rows = (gasStatus && Array.isArray(gasStatus.rows)) ? gasStatus.rows : [];
+        if (rows.length === 0) {
+            return sendReply(msg, `⚠️ ระบบกำลังซิงค์ข้อมูลกับคลาวด์ โปรดลองใหม่อีกครั้งใน 2-3 วินาทีครับ`);
+        }
+
         const activeContainer = gasStatus.activeContainer || 'TRHU 5939460/ID49590AA';
         const activePl = gasStatus.activePl || 'PL-28/ASN/TM/VII/26';
 
