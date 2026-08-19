@@ -32,6 +32,74 @@ function parseDimensionNumbers(dimStr) {
 }
 
 /**
+ * ฟังก์ชันผู้ช่วย: จับคู่ชื่อเอกสาร/Invoice แบบยืดหยุ่น (รองรับ TM001 -> TM202608-001, PL25 -> PL-25)
+ */
+function matchInvoiceFlexible(docStr, ctnStr, targetInvoiceClean) {
+  if (!targetInvoiceClean) return true;
+  const docClean = String(docStr || "").toLowerCase().replace(/[\s\-_]/g, "");
+  const ctnClean = String(ctnStr || "").toLowerCase().replace(/[\s\-_]/g, "");
+  if (docClean.includes(targetInvoiceClean) || ctnClean.includes(targetInvoiceClean)) return true;
+
+  // รองรับ TM001, TM1, TM01 -> TM202608-001
+  if (targetInvoiceClean.startsWith("tm")) {
+    const numPart = targetInvoiceClean.replace("tm", "").replace(/^0+/, "");
+    if (numPart && docClean.startsWith("tm")) {
+      const docNum = docClean.replace("tm", "").replace(/^2026[0-9]{2}/, "").replace(/^0+/, "");
+      if (docNum === numPart || docClean.endsWith(numPart) || docClean.endsWith(numPart.padStart(3, "0"))) {
+        return true;
+      }
+    }
+  }
+
+  // รองรับ PL25, PL28 -> PL-25, PL-28
+  if (targetInvoiceClean.startsWith("pl")) {
+    const numPart = targetInvoiceClean.replace("pl", "").replace(/^0+/, "");
+    if (numPart && docClean.includes(numPart)) return true;
+  }
+
+  return false;
+}
+
+/**
+ * ฟังก์ชันผู้ช่วย: จับคู่รายการไม้แบบยืดหยุ่น (รองรับ มัด, Part Number, และ ขนาด หนาxกว้างxยาว)
+ */
+function matchItemFlexible(itemNo, bdlNo, dimStr, query, cleanQuery) {
+  if (!query) return false;
+  const qClean = String(query || "").toLowerCase().replace(/[\s\-_]/g, "");
+  const itemClean = String(itemNo || "").toLowerCase().replace(/[\s\-_]/g, "");
+  const dimClean = String(dimStr || "").toLowerCase().replace(/[\s\-_]/g, "").replace(/mm/g, "");
+  const bdlClean = String(bdlNo || "").toLowerCase().replace(/[\s\-_]/g, "");
+
+  // 1. ตรงตามเลขมัด
+  if (bdlClean && (bdlClean === cleanQuery || bdlClean === qClean || query === `มัด ${bdlNo}` || query === `มัด${bdlNo}`)) {
+    return true;
+  }
+
+  // 2. ตรงตามรหัส Part หรือมี Part เป็นส่วนหนึ่ง (เช่น 786, 789, 8156521)
+  if (itemClean.includes(qClean) || String(itemNo).toLowerCase() === query) {
+    return true;
+  }
+
+  // 3. ตรงตามขนาดมิติไม้ (เช่น 16x1200x900 หรือ 16x1200 หรือ 15.88x50.8)
+  if (dimClean.includes(qClean) || qClean.includes(dimClean)) {
+    return true;
+  }
+
+  // 4. แยกเทียบหนา x กว้าง x ยาว
+  const qDims = parseDimensionNumbers(query);
+  const rowDims = parseDimensionNumbers(dimStr);
+  if (qDims.thick > 0 && qDims.thick === rowDims.thick) {
+    if (qDims.width > 0 && qDims.width === rowDims.width) {
+      if (qDims.length === 0 || qDims.length === rowDims.length) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
  * อัปเกรดโครงสร้างชีต Packing List (19 คอลัมน์) และ ตัดไม้ (15 คอลัมน์) แยกมิติ หนา, กว้าง, ยาว, และคิวบิก M³ อัตโนมัติ
  */
 function upgradeAllSheetsToDimensions() {
@@ -661,16 +729,13 @@ function doPost(e) {
         const item = String(row[colItem] || "").trim();
         const bdl = String(row[colBdl] || "").trim();
 
-        const plClean = normalize(pl);
-        const ctnClean = normalize(ctn);
-
         const matchInvoice = targetInvoiceClean
-          ? (plClean.includes(targetInvoiceClean) || ctnClean.includes(targetInvoiceClean))
+          ? matchInvoiceFlexible(pl, ctn, targetInvoiceClean)
           : (pl === activeInfo.activePl || ctn === activeInfo.activeContainer);
 
         if (matchInvoice) {
           if (!targetContainerName) {
-            targetContainerName = ctn;
+            targetContainerName = ctn || "คลังในประเทศ";
             targetPlName = pl;
           }
           const exp = Number(row[colExp]) || 0;
@@ -698,7 +763,7 @@ function doPost(e) {
 
       return ContentService.createTextOutput(JSON.stringify({
         status: "success",
-        container: targetContainerName || activeInfo.activeContainer,
+        container: targetContainerName || activeInfo.activeContainer || "คลังในประเทศ",
         plNo: targetPlName || activeInfo.activePl,
         totalExpected: totalExpected,
         totalReceived: totalReceived,
@@ -728,30 +793,27 @@ function doPost(e) {
         const row = data[i];
         const pl = String(row[colPl] || "").trim();
         const ctn = String(row[colCtn] || "").trim();
-        const itemNo = String(row[colItem] || "").trim().toLowerCase();
-        const bdlNo = String(row[colBdl] || "").trim().toLowerCase();
+        const itemNo = String(row[colItem] || "").trim();
+        const bdlNo = String(row[colBdl] || "").trim();
+        const dimStr = String(row[colDim] || "");
 
-        const plClean = normalize(pl);
-        const ctnClean = normalize(ctn);
-        const matchInvoice = !targetInvoiceClean || plClean.includes(targetInvoiceClean) || ctnClean.includes(targetInvoiceClean);
-
-        const matchQuery = (itemNo.includes(query) || bdlNo === query || bdlNo === cleanQuery || 
-                            query === `มัด ${bdlNo}` || query === `bdl ${bdlNo}` || query === `มัด${bdlNo}`);
+        const matchInvoice = !targetInvoiceClean || matchInvoiceFlexible(pl, ctn, targetInvoiceClean);
+        const matchQuery = matchItemFlexible(itemNo, bdlNo, dimStr, query, cleanQuery);
 
         if (matchInvoice && matchQuery) {
           const exp = Number(row[colExp]) || 0;
           const rec = Number(row[colRec]) || 0;
           const bal = exp - rec;
-          const cut = cutMap[`${pl.toLowerCase()}|${ctn.toLowerCase()}|${itemNo}|${bdlNo}`] || cutMap[`${itemNo}|${bdlNo}`] || 0;
+          const cut = cutMap[`${pl.toLowerCase()}|${ctn.toLowerCase()}|${itemNo.toLowerCase()}|${bdlNo.toLowerCase()}`] || cutMap[`${itemNo.toLowerCase()}|${bdlNo.toLowerCase()}`] || 0;
           const avail = rec - cut;
 
           results.push({
             rowIdx: i + 1,
             plNo: row[colPl],
-            container: row[colCtn],
+            container: row[colCtn] || "-",
             item: row[colItem],
-            bdl: row[colBdl],
-            dim: String(row[colDim]),
+            bdl: row[colBdl] || "-",
+            dim: dimStr,
             expQty: exp,
             recQty: rec,
             balQty: bal,
@@ -783,29 +845,24 @@ function doPost(e) {
         const row = data[i];
         const pl = String(row[colPl] || "").trim();
         const ctn = String(row[colCtn] || "").trim();
-        const itemNo = String(row[colItem] || "").trim().toLowerCase();
-        const bdlNo = String(row[colBdl] || "").trim().toLowerCase();
+        const itemNo = String(row[colItem] || "").trim();
+        const bdlNo = String(row[colBdl] || "").trim();
+        const dimStr = String(row[colDim] || "");
 
-        const plClean = normalize(pl);
-        const ctnClean = normalize(ctn);
-
-        // ถ้าผู้ใช้ระบุ Invoice เช่น "PL25" -> กรองเฉพาะตู้ PL-25
-        // ถ้าผู้ใช้ไม่ระบุ Invoice -> ยึดตู้ Active ปัจจุบัน
         const matchInvoice = targetInvoiceClean 
-          ? (plClean.includes(targetInvoiceClean) || ctnClean.includes(targetInvoiceClean))
+          ? matchInvoiceFlexible(pl, ctn, targetInvoiceClean)
           : (pl === activeInfo.activePl || ctn === activeInfo.activeContainer);
 
-        const matchItem = (itemNo === query || bdlNo === query || bdlNo === cleanQuery || 
-                           query === `มัด ${bdlNo}` || query === `bdl ${bdlNo}` || query === `มัด${bdlNo}`);
+        const matchItem = matchItemFlexible(itemNo, bdlNo, dimStr, query, cleanQuery);
 
         if (matchInvoice && matchItem) {
           matchedCandidates.push({
             rowIdx: i + 1,
             plNo: row[colPl],
-            container: row[colCtn],
+            container: row[colCtn] || "-",
             item: row[colItem],
-            bdl: row[colBdl],
-            dim: row[colDim],
+            bdl: row[colBdl] || "-",
+            dim: dimStr,
             expQty: Number(row[colExp]),
             currentRec: Number(row[colRec])
           });
@@ -813,7 +870,7 @@ function doPost(e) {
       }
 
       if (matchedCandidates.length === 0) {
-        return ContentService.createTextOutput(JSON.stringify({ status: "error", message: `ไม่พบ Part หรือ มัดที่: ${payload.query} ในตู้ ${activeInfo.activeContainer}` })).setMimeType(ContentService.MimeType.JSON);
+        return ContentService.createTextOutput(JSON.stringify({ status: "error", message: `ไม่พบรายการ: ${payload.query} ในเอกสารที่ระบุ` })).setMimeType(ContentService.MimeType.JSON);
       }
 
       let targetItem = matchedCandidates[0];
@@ -872,7 +929,6 @@ function doPost(e) {
         return ContentService.createTextOutput(JSON.stringify({ status: "error", message: "จำนวนที่ตัดต้องมากกว่า 0" })).setMimeType(ContentService.MimeType.JSON);
       }
 
-      // ฟังก์ชันแปลงข้อความให้เปรียบเทียบง่าย (ตัดช่องว่างและขีดออก)
       const normalize = (s) => String(s || "").toLowerCase().replace(/[\s\-_]/g, "");
       const targetInvoiceClean = payload.invoice ? normalize(payload.invoice) : "";
 
@@ -883,14 +939,10 @@ function doPost(e) {
         const ctn = String(row[colCtn] || "").trim();
         const itemNo = String(row[colItem] || "").trim();
         const bdlNo = String(row[colBdl] || "").trim();
+        const dimStr = String(row[colDim] || "");
 
-        // ตรวจสอบ Invoice / Container แบบยืดหยุ่น (เช่น PL-25, PL25, BEAU)
-        const plClean = normalize(pl);
-        const ctnClean = normalize(ctn);
-        const matchInvoice = !targetInvoiceClean || plClean.includes(targetInvoiceClean) || ctnClean.includes(targetInvoiceClean);
-        
-        const matchItem = (itemNo.toLowerCase() === query || bdlNo.toLowerCase() === query || bdlNo.toLowerCase() === cleanQuery ||
-                           query === `มัด ${bdlNo.toLowerCase()}` || query === `มัด${bdlNo.toLowerCase()}`);
+        const matchInvoice = !targetInvoiceClean || matchInvoiceFlexible(pl, ctn, targetInvoiceClean);
+        const matchItem = matchItemFlexible(itemNo, bdlNo, dimStr, query, cleanQuery);
 
         if (matchInvoice && matchItem) {
           const rec = Number(row[colRec]) || 0;
@@ -899,10 +951,10 @@ function doPost(e) {
 
           matched.push({
             plNo: pl,
-            container: ctn,
+            container: ctn || "-",
             item: itemNo,
-            bdl: bdlNo,
-            dim: row[colDim],
+            bdl: bdlNo || "-",
+            dim: dimStr,
             recQty: rec,
             currentCut: currentCut,
             availStock: avail
@@ -1033,12 +1085,12 @@ function doPost(e) {
         const ctnClean = normalize(ctn);
 
         const matchInvoice = targetInvoiceClean
-          ? (plClean.includes(targetInvoiceClean) || ctnClean.includes(targetInvoiceClean))
+          ? matchInvoiceFlexible(pl, ctn, targetInvoiceClean)
           : (pl === activeInfo.activePl || ctn === activeInfo.activeContainer);
 
         if (matchInvoice) {
           if (!targetContainerName) {
-            targetContainerName = ctn;
+            targetContainerName = ctn || "คลังในประเทศ";
             targetPlName = pl;
           }
           const exp = Number(row[colExp]) || 0;
@@ -1047,9 +1099,9 @@ function doPost(e) {
           if (bal > 0) {
             pendingItems.push({
               plNo: pl,
-              container: ctn,
+              container: ctn || "-",
               item: row[colItem],
-              bdl: row[colBdl],
+              bdl: row[colBdl] || "-",
               dim: String(row[colDim]),
               expQty: exp,
               recQty: rec,

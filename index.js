@@ -403,17 +403,18 @@ async function processMessage(msg) {
 
     // ====================================================
     // 2. สรุปภาพรวมตู้ & คำถามยอดค้างรับภาษาคน (Fast Local Math Path)
-    // รูปแบบ: "1", "สรุป", "สรุป PL25", "PL25 สรุป", "Iv PL25 ยอดค้างรับกี่ชิ้น", "ค้างรับกี่ชิ้น", "เหลือกี่ชิ้น"
+    // รูปแบบ: "1", "สรุป", "สรุป PL25", "สรุป TM001", "PL25 สรุป", "TM001 สรุป", "Iv PL25 ยอดค้างรับกี่ชิ้น", "ค้างรับกี่ชิ้น", "เหลือกี่ชิ้น"
     // ====================================================
     let summaryInvoice = null;
-    const invMatch = rawText.match(/(?:PL|IV)\s*[-_]?\s*([0-9]{1,3})/i);
+    const invMatch = rawText.match(/(?:PL|IV|TM)\s*[-_]?\s*([0-9a-zA-Z\-_]+)/i);
     if (invMatch) {
-        summaryInvoice = `PL${invMatch[1]}`;
+        summaryInvoice = invMatch[0].trim();
     }
 
     const isSummaryIntent = cleanText === '1' || 
                             ['!สรุป', '!status', '!summary', 'สรุป', 'status', 'summary', 'รายงาน', 'สรุปตู้'].includes(cleanText) ||
                             cleanText.startsWith('สรุป pl') || (cleanText.startsWith('pl') && cleanText.includes('สรุป')) ||
+                            cleanText.startsWith('สรุป tm') || (cleanText.startsWith('tm') && cleanText.includes('สรุป')) ||
                             (cleanText.includes('ค้างรับ') && (cleanText.includes('กี่') || cleanText.includes('เท่าไหร่') || cleanText.includes('ยอด') || cleanText.includes('รวม'))) ||
                             (cleanText.includes('เหลือ') && cleanText.includes('ชิ้น')) ||
                             (cleanText.includes('เหลือ') && cleanText.includes('เท่าไหร่'));
@@ -436,20 +437,36 @@ async function processMessage(msg) {
         let plTitle = activePl;
 
         if (targetClean) {
-            targetRows = rows.filter(r => normalize(r.plNo).includes(targetClean) || normalize(r.container).includes(targetClean));
+            targetRows = rows.filter(r => {
+                const p = normalize(r.plNo);
+                const c = normalize(r.container);
+                if (p.includes(targetClean) || c.includes(targetClean)) return true;
+                if (targetClean.startsWith('tm')) {
+                    const numPart = targetClean.replace('tm', '').replace(/^0+/, '');
+                    if (numPart && p.startsWith('tm')) {
+                        const pNum = p.replace('tm', '').replace(/^2026[0-9]{2}/, '').replace(/^0+/, '');
+                        return pNum === numPart || p.endsWith(numPart) || p.endsWith(numPart.padStart(3, '0'));
+                    }
+                }
+                if (targetClean.startsWith('pl')) {
+                    const numPart = targetClean.replace('pl', '').replace(/^0+/, '');
+                    return numPart && p.includes(numPart);
+                }
+                return false;
+            });
             if (targetRows.length > 0) {
-                ctnTitle = targetRows[0].container;
+                ctnTitle = targetRows[0].container || 'คลังในประเทศ';
                 plTitle = targetRows[0].plNo;
             }
         } else if (!cleanText.includes('ทั้งหมด') && !cleanText.includes('รวม')) {
             targetRows = rows.filter(r => r.plNo === activePl || r.container === activeContainer);
         } else {
-            ctnTitle = 'ทุกตู้ในคลัง (Grand Total)';
-            plTitle = 'รวมทุก Invoice';
+            ctnTitle = 'ทุกตู้/ทุกบิลในคลัง (Grand Total)';
+            plTitle = 'รวมทุก Invoice & บิลในประเทศ';
         }
 
         if (targetRows.length === 0) {
-            return sendReply(msg, `❌ ไม่พบข้อมูลตู้ ${summaryInvoice || ''} ในระบบครับ`);
+            return sendReply(msg, `❌ ไม่พบข้อมูลเอกสาร/ตู้ ${summaryInvoice || ''} ในระบบครับ`);
         }
 
         let exp = 0, rec = 0, cut = 0, comp = 0, pend = 0;
@@ -562,13 +579,38 @@ async function processMessage(msg) {
         senderName = msg.from ? msg.from.split('@')[0] : 'ผู้ใช้';
     }
 
-    // 4.0 กรณีระบุทั้งมัดและ Part (เช่น "PL25 มัด 33 ตัด 6601628 315" หรือ "PL25 มัด 33 ตัด Part 6601628 315")
-    let cutBdlPartMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s*)?(?:มัด|bdl)\s*(\d+)[\s,:]+ตัด(?:\s*part|\s*พาร์ท|\s*รายการ)?\s*([0-9]{6,8})[\s,:]+([0-9]+)(?:\s+(.+))?$/i);
-    if (cutBdlPartMatch) {
-        cutInvoice = cutBdlPartMatch[1] ? cutBdlPartMatch[1].trim() : null;
-        cutTargetQuery = cutBdlPartMatch[3].trim();
-        cutQty = parseInt(cutBdlPartMatch[4], 10);
-        cutNote = cutBdlPartMatch[5] ? `${senderName} (${cutBdlPartMatch[5].trim()})` : `เบิกตัดมัด ${cutBdlPartMatch[2]} โดย ${senderName}`;
+    // 4.0 กรณีตัดตามขนาดไม้ Dimension (เช่น "TM001 ตัด 16x1200x900 100", "ตัด 16x1200x900 100", "TM003 ตัด 15.88x50.8x1100 500", "16x1200x900 ตัด 100")
+    let cutDimMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s+)?ตัด(?:\s*ขนาด)?\s*([0-9\.]+\s*(?:x|\*)\s*[0-9\.]+(?:\s*(?:x|\*)\s*[0-9\.]+)?)[\s,:]+(\d+)(?:\s+(.+))?$/i);
+    if (!cutDimMatch) {
+        cutDimMatch = rawText.match(/^([0-9\.]+\s*(?:x|\*)\s*[0-9\.]+(?:\s*(?:x|\*)\s*[0-9\.]+)?)[\s,:]+ตัด[\s,:]+(\d+)(?:\s+(.+))?$/i);
+    }
+    if (cutDimMatch) {
+        cutInvoice = cutDimMatch[1] ? cutDimMatch[1].trim() : null;
+        cutTargetQuery = cutDimMatch[2].trim();
+        cutQty = parseInt(cutDimMatch[3], 10);
+        cutNote = cutDimMatch[4] ? `${senderName} (${cutDimMatch[4].trim()})` : `เบิกตัดขนาด ${cutTargetQuery} โดย ${senderName}`;
+    }
+
+    // 4.1 กรณีตัดตามรหัส Part สั้นๆ / ในประเทศ (เช่น "TM001 ตัด 786 100", "ตัด 786 100", "TM003 ตัด 789 500")
+    if (!cutTargetQuery) {
+        let cutDomesticPartMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s+)?ตัด(?:\s*part|\s*พาร์ท|\s*รหัส)?\s*([0-9]{3,5})[\s,:]+(\d+)(?:\s+(.+))?$/i);
+        if (cutDomesticPartMatch) {
+            cutInvoice = cutDomesticPartMatch[1] ? cutDomesticPartMatch[1].trim() : null;
+            cutTargetQuery = cutDomesticPartMatch[2].trim();
+            cutQty = parseInt(cutDomesticPartMatch[3], 10);
+            cutNote = cutDomesticPartMatch[4] ? `${senderName} (${cutDomesticPartMatch[4].trim()})` : `เบิกตัด Part ${cutTargetQuery} โดย ${senderName}`;
+        }
+    }
+
+    // 4.2 กรณีระบุทั้งมัดและ Part (เช่น "PL25 มัด 33 ตัด 6601628 315" หรือ "PL25 มัด 33 ตัด Part 6601628 315")
+    if (!cutTargetQuery) {
+        let cutBdlPartMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s*)?(?:มัด|bdl)\s*(\d+)[\s,:]+ตัด(?:\s*part|\s*พาร์ท|\s*รายการ)?\s*([0-9]{6,8})[\s,:]+([0-9]+)(?:\s+(.+))?$/i);
+        if (cutBdlPartMatch) {
+            cutInvoice = cutBdlPartMatch[1] ? cutBdlPartMatch[1].trim() : null;
+            cutTargetQuery = cutBdlPartMatch[3].trim();
+            cutQty = parseInt(cutBdlPartMatch[4], 10);
+            cutNote = cutBdlPartMatch[5] ? `${senderName} (${cutBdlPartMatch[5].trim()})` : `เบิกตัดมัด ${cutBdlPartMatch[2]} โดย ${senderName}`;
+        }
     }
 
     // 4.1 กรณี "ตัดหมด 14", "ตัดมัด 14 หมด", "เบิกมัด 14 ทั้งหมด"
