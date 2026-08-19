@@ -219,7 +219,7 @@ function upgradeAllSheetsToDimensions() {
       fL.push([`=IF(OR(ISBLANK(G${r}), ISBLANK(K${r})), "", ROUND((G${r} * H${r} * I${r} * K${r}) / 1000000000, 3))`]);
       fN.push([`=IF(ISBLANK(C${r}), "", MAX(0, K${r}-M${r}))`]);
       fO.push([`=IF(ISBLANK(C${r}), "", IF(M${r}=0, "⏳ ยังไม่รับ", IF(R${r}=0, "⚪ ตัดหมดแล้ว", IF(Q${r}>0, "🪵 กำลังตัดใช้", IF(M${r}=K${r}, "🟢 รับครบพร้อมใช้", IF(M${r}>K${r}, "⚠️ รับเกิน", "🟡 รับบางส่วน"))))))`]);
-      fQ.push([`=IF(ISBLANK(C${r}), "", SUMIFS('ตัดไม้'!$K:$K, 'ตัดไม้'!$C:$C, C${r}, 'ตัดไม้'!$E:$E, E${r}, 'ตัดไม้'!$F:$F, F${r}))`]);
+      fQ.push([`=IF(ISBLANK(C${r}), "", IF(OR(ISBLANK(F${r}), F${r}="-", F${r}=""), SUMIFS('ตัดไม้'!$K:$K, 'ตัดไม้'!$C:$C, C${r}, 'ตัดไม้'!$E:$E, E${r}), SUMIFS('ตัดไม้'!$K:$K, 'ตัดไม้'!$C:$C, C${r}, 'ตัดไม้'!$E:$E, E${r}, 'ตัดไม้'!$F:$F, F${r})))`]);
       fR.push([`=IF(ISBLANK(C${r}), "", MAX(0, M${r}-Q${r}))`]);
       fS.push([`=IF(OR(ISBLANK(G${r}), ISBLANK(R${r})), "", ROUND((G${r} * H${r} * I${r} * R${r}) / 1000000000, 3))`]);
     }
@@ -623,9 +623,16 @@ function getCutQuantitiesMap(cutSheet) {
     const key = `${pl}|${ctn}|${item}|${bdl}`;
     cutMap[key] = (cutMap[key] || 0) + cutQty;
 
+    // เก็บ fallback key สำหรับไม้ที่ไม่มีมัด
+    const noBdlKey = `${pl}|${item}`;
+    cutMap[noBdlKey] = (cutMap[noBdlKey] || 0) + cutQty;
+
     // เก็บ fallback key แบบสั้นด้วย
     const shortKey = `${item}|${bdl}`;
     cutMap[shortKey] = (cutMap[shortKey] || 0) + cutQty;
+
+    const itemOnlyKey = `${item}`;
+    cutMap[itemOnlyKey] = (cutMap[itemOnlyKey] || 0) + cutQty;
   }
   return cutMap;
 }
