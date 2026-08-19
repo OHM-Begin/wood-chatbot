@@ -540,13 +540,17 @@ function getCutQuantitiesMap(cutSheet) {
   const data = cutSheet.getDataRange().getValues();
   if (data.length < 2) return cutMap;
 
+  const headers = data[0].map(h => String(h).toLowerCase());
+  let colCutQty = headers.findIndex(h => h.includes("จำนวนที่ตัด") || h.includes("ตัดออก") || h.includes("cut"));
+  if (colCutQty === -1) colCutQty = (data[0].length >= 14) ? 10 : 7;
+
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     const pl = String(row[2] || "").trim().toLowerCase();
     const ctn = String(row[3] || "").trim().toLowerCase();
     const item = String(row[4] || "").trim().toLowerCase();
     const bdl = String(row[5] || "").trim().toLowerCase();
-    const cutQty = Number(row[7]) || 0;
+    const cutQty = Number(row[colCutQty]) || 0;
 
     const key = `${pl}|${ctn}|${item}|${bdl}`;
     cutMap[key] = (cutMap[key] || 0) + cutQty;
