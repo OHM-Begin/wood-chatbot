@@ -125,8 +125,8 @@ client.on('ready', () => {
     console.log('✅ บอท WhatsApp (ระบบตรวจรับไม้ & เบิกตัดไม้ + Gemini AI) พร้อมทำงานแล้ว!');
 });
 
-// 4. Helper: Call Google Apps Script safely
-async function callGAS(payload) {
+// 4. Helper: Call Google Apps Script safely with auto-retry
+async function callGAS(payload, retryCount = 1) {
     try {
         const webAppUrl = process.env.WEB_APP_URL;
         if (!webAppUrl) throw new Error('ไม่พบ WEB_APP_URL ใน .env');
@@ -145,13 +145,22 @@ async function callGAS(payload) {
             json = JSON.parse(text);
         } catch (parseErr) {
             console.error('⚠️ ผลลัพธ์จาก GAS ไม่ใช่ JSON:', text.slice(0, 150));
-            return { status: 'error', message: 'โปรด Deploy Version ใหม่ใน Google Apps Script' };
+            if (retryCount > 0) {
+                console.log('🔄 กำลังลองส่งซ้ำให้อัตโนมัติ (Auto-Retry)...');
+                await new Promise(r => setTimeout(r, 1000));
+                return await callGAS(payload, retryCount - 1);
+            }
+            return { status: 'error', message: '⚠️ การเชื่อมต่อคลาวด์ล่าช้าชั่วคราว ข้อมูลในชีตอาจถูกบันทึกแล้ว โปรดพิมพ์ "สรุป" เพื่อเช็คสต็อกครับ' };
         }
         
         console.log(`📥 ผลลัพธ์จาก GAS:`, json);
         return json;
     } catch (err) {
         console.error('❌ Error calling GAS:', err.message);
+        if (retryCount > 0) {
+            await new Promise(r => setTimeout(r, 1000));
+            return await callGAS(payload, retryCount - 1);
+        }
         return { status: 'error', message: err.message };
     }
 }
@@ -572,7 +581,7 @@ async function processMessage(msg) {
                 cutInvoice = cutShortMatch[1] ? cutShortMatch[1].trim() : null;
                 cutTargetQuery = `มัด ${cutShortMatch[2].trim()}`;
                 cutQty = parseInt(cutShortMatch[3], 10);
-                cutNote = cutShortMatch[3] ? `${senderName} (${cutShortMatch[3].trim()})` : `เบิกตัดโดย ${senderName}`;
+                cutNote = cutShortMatch[4] ? `${senderName} (${cutShortMatch[4].trim()})` : `เบิกตัดโดย ${senderName}`;
             }
         }
     }
