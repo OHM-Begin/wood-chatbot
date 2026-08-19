@@ -134,12 +134,13 @@ function buildDashboardSheet() {
   const lenHeaders = ["กลุ่มความยาวไม้", "ช่วงขนาด (MM)", "จำนวนมัดรวม", "ปริมาตรตามตู้ (M³)", "สัดส่วน %"];
   dash.getRange(17, 7, 1, lenHeaders.length).setValues([lenHeaders]).setBackground("#475569").setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center");
 
-  dash.getRange("G18:K18").setValues([["ความยาวมาตรฐาน", "500 - 600 MM", "=COUNTIF('Packing List'!G2:G, \"*x 5*\")", "=SUMIF('Packing List'!G2:G, \"*x 5*\", 'Packing List'!I2:I)", "=I18/SUM('Packing List'!I2:I)"]]).setBackground("#f8fafc");
-  dash.getRange("G19:K19").setValues([["ความยาวสั้น", "< 500 MM", "=COUNTIF('Packing List'!G2:G, \"*x 4*\")", "=SUMIF('Packing List'!G2:G, \"*x 4*\", 'Packing List'!I2:I)", "=I19/SUM('Packing List'!I2:I)"]]).setBackground("#f8fafc");
-  dash.getRange("G20:K20").setValues([["ความยาวพิเศษ (ไม้ยาว)", "> 600 MM", "=COUNTIF('Packing List'!G2:G, \"*x 6*\") + COUNTIF('Packing List'!G2:G, \"*x 7*\") + COUNTIF('Packing List'!G2:G, \"*x 8*\")", "=SUMIF('Packing List'!G2:G, \"*x 6*\", 'Packing List'!I2:I) + SUMIF('Packing List'!G2:G, \"*x 7*\", 'Packing List'!I2:I) + SUMIF('Packing List'!G2:G, \"*x 8*\", 'Packing List'!I2:I)", "=I20/SUM('Packing List'!I2:I)"]]).setBackground("#f8fafc");
+  dash.getRange("G18:K18").setValues([["ความยาวมาตรฐาน", "500 - 600 MM", "=COUNTIF('Packing List'!G2:G, \"* 5?? MM\") + COUNTIF('Packing List'!G2:G, \"* 5??.? MM\")", "=SUMIF('Packing List'!G2:G, \"* 5?? MM\", 'Packing List'!I2:I) + SUMIF('Packing List'!G2:G, \"* 5??.? MM\", 'Packing List'!I2:I)", "=J18/J21"]]).setBackground("#f8fafc");
+  dash.getRange("G19:K19").setValues([["ความยาวสั้น", "< 500 MM", "=COUNTIF('Packing List'!G2:G, \"* 4?? MM\") + COUNTIF('Packing List'!G2:G, \"* 4??.? MM\")", "=SUMIF('Packing List'!G2:G, \"* 4?? MM\", 'Packing List'!I2:I) + SUMIF('Packing List'!G2:G, \"* 4??.? MM\", 'Packing List'!I2:I)", "=J19/J21"]]).setBackground("#f8fafc");
+  dash.getRange("G20:K20").setValues([["ความยาวพิเศษ (ไม้ยาว)", "> 600 MM", "=I21-I18-I19", "=J21-J18-J19", "=J20/J21"]]).setBackground("#f8fafc");
   dash.getRange("G21:K21").setValues([["รวมทั้งหมด", "ทุกความยาว", "=COUNTA('Packing List'!F2:F)", "=SUM('Packing List'!I2:I)", "100.0%"]]).setBackground("#e2e8f0").setFontWeight("bold");
 
-  dash.getRange("I18:I21").setNumberFormat("#,##0.00").setHorizontalAlignment("right");
+  dash.getRange("I18:I21").setNumberFormat("#,##0").setHorizontalAlignment("right");
+  dash.getRange("J18:J21").setNumberFormat("#,##0.00").setHorizontalAlignment("right");
   dash.getRange("K18:K21").setNumberFormat("0.0%").setHorizontalAlignment("right");
   dash.getRange("G18:H21").setHorizontalAlignment("left");
   dash.getRange("H18:H21").setHorizontalAlignment("center");
