@@ -114,9 +114,9 @@ function buildDashboardSheet() {
 
   dash.setRowHeight(15, 15); // Spacer
 
-  // 4. Section 2: อายุวัตถุดิบ & การจัดกลุ่มความเร่งด่วน (Aging Analysis)
+  // 4. Section 2 & 3: อายุวัตถุดิบ & สรุปตามความยาวไม้ (Length & Volume)
   dash.getRange("A16:E16").merge().setValue("⏳ 2. วิเคราะห์อายุไม้ในคลัง (AGING & SLOW-MOVING)").setBackground("#1e293b").setFontColor("#ffffff").setFontWeight("bold").setFontSize(11);
-  dash.getRange("G16:K16").merge().setValue("🌲 3. สรุปปริมาตรแยกตามขนาด (DIMENSION & VOLUME)").setBackground("#1e293b").setFontColor("#ffffff").setFontWeight("bold").setFontSize(11);
+  dash.getRange("G16:K16").merge().setValue("📏 3. สรุปปริมาตรแยกตามความยาว (LENGTH & VOLUME SUMMARY)").setBackground("#1e293b").setFontColor("#ffffff").setFontWeight("bold").setFontSize(11);
   dash.setRowHeight(16, 28);
 
   const agingHeaders = ["ช่วงอายุไม้", "เกณฑ์วัน", "จำนวนมัด", "สต็อกคงเหลือ (PCS)", "สถานะการจัดการ"];
@@ -130,14 +130,14 @@ function buildDashboardSheet() {
   dash.getRange("A18:B20").setHorizontalAlignment("center");
   dash.getRange("E18:E20").setHorizontalAlignment("left");
 
-  // Dimension & Volume Summary (G17:K21)
-  const dimHeaders = ["ขนาดความหนา", "ประเภทการใช้งาน", "จำนวนมัดรวม", "ปริมาตรตามตู้ (M³)", "สัดส่วน %"];
-  dash.getRange(17, 7, 1, dimHeaders.length).setValues([dimHeaders]).setBackground("#475569").setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center");
+  // Section 3: Length & Volume Summary (G17:K21)
+  const lenHeaders = ["กลุ่มความยาวไม้", "ช่วงขนาด (MM)", "จำนวนมัดรวม", "ปริมาตรตามตู้ (M³)", "สัดส่วน %"];
+  dash.getRange(17, 7, 1, lenHeaders.length).setValues([lenHeaders]).setBackground("#475569").setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center");
 
-  dash.getRange("G18:K18").setValues([["หนา 17 MM", "ไม้หน้ากว้าง (ตู้ PL-28)", "=COUNTIF('Packing List'!G2:G, \"17 x*\")", "=SUMIF('Packing List'!G2:G, \"17 x*\", 'Packing List'!I2:I)", "=I18/SUM('Packing List'!I2:I)"]]).setBackground("#f8fafc");
-  dash.getRange("G19:K19").setValues([["หนา 16 MM", "ไม้โครงสร้าง (ตู้ PL-25)", "=COUNTIF('Packing List'!G2:G, \"16 x*\")", "=SUMIF('Packing List'!G2:G, \"16 x*\", 'Packing List'!I2:I)", "=I19/SUM('Packing List'!I2:I)"]]).setBackground("#f8fafc");
-  dash.getRange("G20:K20").setValues([["หนา 15 MM", "ไม้ระแนง/งานประกอบ", "=COUNTIF('Packing List'!G2:G, \"15 x*\")", "=SUMIF('Packing List'!G2:G, \"15 x*\", 'Packing List'!I2:I)", "=I20/SUM('Packing List'!I2:I)"]]).setBackground("#f8fafc");
-  dash.getRange("G21:K21").setValues([["รวมทั้งหมด", "ทุกขนาด", "=COUNTA('Packing List'!F2:F)", "=SUM('Packing List'!I2:I)", "100.0%"]]).setBackground("#e2e8f0").setFontWeight("bold");
+  dash.getRange("G18:K18").setValues([["ความยาวมาตรฐาน", "500 - 600 MM", "=COUNTIF('Packing List'!G2:G, \"*x 5*\")", "=SUMIF('Packing List'!G2:G, \"*x 5*\", 'Packing List'!I2:I)", "=I18/SUM('Packing List'!I2:I)"]]).setBackground("#f8fafc");
+  dash.getRange("G19:K19").setValues([["ความยาวสั้น", "< 500 MM", "=COUNTIF('Packing List'!G2:G, \"*x 4*\")", "=SUMIF('Packing List'!G2:G, \"*x 4*\", 'Packing List'!I2:I)", "=I19/SUM('Packing List'!I2:I)"]]).setBackground("#f8fafc");
+  dash.getRange("G20:K20").setValues([["ความยาวพิเศษ (ไม้ยาว)", "> 600 MM", "=COUNTIF('Packing List'!G2:G, \"*x 6*\") + COUNTIF('Packing List'!G2:G, \"*x 7*\") + COUNTIF('Packing List'!G2:G, \"*x 8*\")", "=SUMIF('Packing List'!G2:G, \"*x 6*\", 'Packing List'!I2:I) + SUMIF('Packing List'!G2:G, \"*x 7*\", 'Packing List'!I2:I) + SUMIF('Packing List'!G2:G, \"*x 8*\", 'Packing List'!I2:I)", "=I20/SUM('Packing List'!I2:I)"]]).setBackground("#f8fafc");
+  dash.getRange("G21:K21").setValues([["รวมทั้งหมด", "ทุกความยาว", "=COUNTA('Packing List'!F2:F)", "=SUM('Packing List'!I2:I)", "100.0%"]]).setBackground("#e2e8f0").setFontWeight("bold");
 
   dash.getRange("I18:I21").setNumberFormat("#,##0.00").setHorizontalAlignment("right");
   dash.getRange("K18:K21").setNumberFormat("0.0%").setHorizontalAlignment("right");
@@ -151,31 +151,44 @@ function buildDashboardSheet() {
   dash.setRowHeight(21, 24);
   dash.setRowHeight(22, 15); // Spacer
 
-  // 5. Section 3: ประวัติการตัดไม้ล่าสุด (Recent Cutting Log)
-  dash.getRange("A23:K23").merge().setValue("✂️ 4. รายการตัดไม้ล่าสุด (LATEST WOOD CUTTING TRANSACTIONS)").setBackground("#1e293b").setFontColor("#ffffff").setFontWeight("bold").setFontSize(11);
+  // 5. Section 4: วิเคราะห์ความเร็วการใช้ไม้ & อัตราการตัด (CUTTING VELOCITY & BURN RATE ANALYTICS)
+  dash.getRange("A23:E23").merge().setValue("⚡ 4.1 ความเร็วการตัดไม้ตามช่วงเวลา (CUTTING VELOCITY)").setBackground("#1e293b").setFontColor("#ffffff").setFontWeight("bold").setFontSize(11);
+  dash.getRange("G23:K23").merge().setValue("🔥 4.2 อัตราการใช้ไม้ & สต็อกคงเหลือ (BURN RATE & DAYS OF INVENTORY)").setBackground("#1e293b").setFontColor("#ffffff").setFontWeight("bold").setFontSize(11);
   dash.setRowHeight(23, 28);
 
-  const cutHeaders = ["ลำดับ", "วัน-เวลาที่ตัด", "เลขที่ PL", "เลขตู้", "Part Number", "มัดที่", "ขนาด (MM)", "ตัดออก (PCS)", "คงเหลือพร้อมใช้", "ผู้เบิก / หมายเหตุ", "สถานะ"];
-  dash.getRange(24, 1, 1, cutHeaders.length).setValues([cutHeaders]).setBackground("#334155").setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center");
-  dash.setRowHeight(24, 26);
+  const velHeaders = ["ช่วงเวลาการตัดไม้", "เกณฑ์การวัด", "จำนวนครั้งที่เบิก", "ยอดตัดสะสม (PCS)", "สถานะอัตราการใช้"];
+  dash.getRange(24, 1, 1, velHeaders.length).setValues([velHeaders]).setBackground("#334155").setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center");
 
-  // Link up to 5 latest rows from 'ตัดไม้'
-  for (let r = 1; r <= 5; r++) {
-    const rowIdx = 24 + r;
-    dash.getRange(`A${rowIdx}`).setFormula(`=IF(ISBLANK('ตัดไม้'!A${r+1}), "", 'ตัดไม้'!A${r+1})`).setHorizontalAlignment("center");
-    dash.getRange(`B${rowIdx}`).setFormula(`=IF(ISBLANK('ตัดไม้'!B${r+1}), "", 'ตัดไม้'!B${r+1})`).setHorizontalAlignment("center");
-    dash.getRange(`C${rowIdx}`).setFormula(`=IF(ISBLANK('ตัดไม้'!C${r+1}), "", 'ตัดไม้'!C${r+1})`).setHorizontalAlignment("left");
-    dash.getRange(`D${rowIdx}`).setFormula(`=IF(ISBLANK('ตัดไม้'!D${r+1}), "", 'ตัดไม้'!D${r+1})`).setHorizontalAlignment("left");
-    dash.getRange(`E${rowIdx}`).setFormula(`=IF(ISBLANK('ตัดไม้'!E${r+1}), "", 'ตัดไม้'!E${r+1})`).setHorizontalAlignment("center").setFontWeight("bold");
-    dash.getRange(`F${rowIdx}`).setFormula(`=IF(ISBLANK('ตัดไม้'!F${r+1}), "", 'ตัดไม้'!F${r+1})`).setHorizontalAlignment("center");
-    dash.getRange(`G${rowIdx}`).setFormula(`=IF(ISBLANK('ตัดไม้'!G${r+1}), "", 'ตัดไม้'!G${r+1})`).setHorizontalAlignment("left");
-    dash.getRange(`H${rowIdx}`).setFormula(`=IF(ISBLANK('ตัดไม้'!H${r+1}), "", 'ตัดไม้'!H${r+1})`).setHorizontalAlignment("right").setFontColor("#e11d48").setFontWeight("bold").setNumberFormat("#,##0");
-    dash.getRange(`I${rowIdx}`).setFormula(`=IF(ISBLANK('ตัดไม้'!J${r+1}), "", 'ตัดไม้'!J${r+1})`).setHorizontalAlignment("right").setFontColor("#059669").setFontWeight("bold").setNumberFormat("#,##0");
-    dash.getRange(`J${rowIdx}`).setFormula(`=IF(ISBLANK('ตัดไม้'!K${r+1}), "", 'ตัดไม้'!K${r+1})`).setHorizontalAlignment("left");
-    dash.getRange(`K${rowIdx}`).setFormula(`=IF(ISBLANK('ตัดไม้'!A${r+1}), "", "✂️ ตัดสำเร็จ")`).setHorizontalAlignment("center");
-    dash.getRange(`A${rowIdx}:K${rowIdx}`).setBackground(r % 2 === 0 ? "#f8fafc" : "#ffffff");
-    dash.setRowHeight(rowIdx, 24);
-  }
+  dash.getRange("A25:E25").setValues([["⚡ ตัดสะสมวันนี้ (Today)", "วันนี้", "=COUNTIF('ตัดไม้'!B2:B, \"*\" & TEXT(TODAY(), \"yyyy-MM-dd\") & \"*\")", "=SUMIF('ตัดไม้'!B2:B, \"*\" & TEXT(TODAY(), \"yyyy-MM-dd\") & \"*\", 'ตัดไม้'!H2:H)", "อัตราตัดรายวัน"]]).setBackground("#f8fafc");
+  dash.getRange("A26:E26").setValues([["📅 ตัดสะสม 7 วันล่าสุด", "ย้อนหลัง 7 วัน", "=COUNTIFS('ตัดไม้'!B2:B, \">=\" & TEXT(TODAY()-7, \"yyyy-MM-dd\"))", "=SUMIFS('ตัดไม้'!H2:H, 'ตัดไม้'!B2:B, \">=\" & TEXT(TODAY()-7, \"yyyy-MM-dd\"))", "ยอดเฉลี่ยสัปดาห์"]]).setBackground("#f8fafc");
+  dash.getRange("A27:E27").setValues([["📊 ตัดสะสม 30 วันล่าสุด", "ย้อนหลัง 30 วัน", "=COUNTIFS('ตัดไม้'!B2:B, \">=\" & TEXT(TODAY()-30, \"yyyy-MM-dd\"))", "=SUMIFS('ตัดไม้'!H2:H, 'ตัดไม้'!B2:B, \">=\" & TEXT(TODAY()-30, \"yyyy-MM-dd\"))", "ยอดเฉลี่ยรายเดือน"]]).setBackground("#f8fafc");
+  dash.getRange("A28:E28").setValues([["📈 ตัดสะสมรวมทั้งหมด", "ตั้งแต่เปิดระบบ", "=COUNTA('ตัดไม้'!A2:A)", "=SUM('ตัดไม้'!H2:H)", "ตัดรวมทั้งสิ้น"]]).setBackground("#e2e8f0").setFontWeight("bold");
+
+  dash.getRange("C25:D28").setNumberFormat("#,##0").setHorizontalAlignment("right");
+  dash.getRange("A25:B28").setHorizontalAlignment("left");
+  dash.getRange("E25:E28").setHorizontalAlignment("center");
+
+  // Section 4.2: Burn Rate & Days of Inventory
+  const burnHeaders = ["ดัชนีชี้วัดความเร็ว (KPI)", "ค่าตัวเลข", "หน่วยนับ", "เกณฑ์ประเมินสถานะ", "ข้อแนะนำการจัดซื้อ"];
+  dash.getRange(24, 7, 1, burnHeaders.length).setValues([burnHeaders]).setBackground("#334155").setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center");
+
+  dash.getRange("G25:K25").setValues([["🔥 อัตราตัดเฉลี่ยต่อวัน (Avg Daily)", "=IFERROR(ROUND(SUM('ตัดไม้'!H2:H)/MAX(1, COUNTA(UNIQUE(FILTER(LEFT('ตัดไม้'!B2:B, 10), 'ตัดไม้'!B2:B<>\"\")))), 0), 0)", "PCS / วัน", "กำลังผลิตปกติ", "ใช้คำนวณรอบตู้ถัดไป"]]).setBackground("#f8fafc");
+  dash.getRange("G26:K26").setValues([["🪵 สต็อกไม้พร้อมใช้ในคลังตอนนี้", "=SUM('Packing List'!J2:J) - SUM('ตัดไม้'!H2:H)", "PCS", "ไม้พร้อมเบิกทันที", "พร้อมจ่ายงานฝ่ายผลิต"]]).setBackground("#f8fafc");
+  dash.getRange("G27:K27").setValues([["⏱️ ประมาณการวันที่สต็อกจะพอใช้", "=IF(H25>0, ROUND(H26/H25, 0), \"พร้อมใช้ต่อเนื่อง\")", "วัน", "🟢 สต็อกปลอดภัย", "สั่งตู้ถัดไปล่วงหน้า 30 วัน"]]).setBackground("#f0fdf4").setFontColor("#166534").setFontWeight("bold");
+  dash.getRange("G28:K28").setValues([["🎯 สัดส่วนการตัดเทียบกับไม้ที่รับ", "=IF(SUM('Packing List'!J2:J)>0, SUM('ตัดไม้'!H2:H)/SUM('Packing List'!J2:J), 0)", "%", "ความคืบหน้าตัดไม้", "อัตราการระบายไม้ในคลัง"]]).setBackground("#e2e8f0").setFontWeight("bold");
+
+  dash.getRange("H25:H26").setNumberFormat("#,##0").setHorizontalAlignment("right").setFontWeight("bold");
+  dash.getRange("H27").setHorizontalAlignment("right").setFontWeight("bold");
+  dash.getRange("H28").setNumberFormat("0.0%").setHorizontalAlignment("right").setFontWeight("bold");
+  dash.getRange("I25:J28").setHorizontalAlignment("center");
+  dash.getRange("G25:G28").setHorizontalAlignment("left");
+  dash.getRange("K25:K28").setHorizontalAlignment("left");
+
+  dash.setRowHeight(24, 26);
+  dash.setRowHeight(25, 24);
+  dash.setRowHeight(26, 24);
+  dash.setRowHeight(27, 24);
+  dash.setRowHeight(28, 24);
 
   // Adjust Column Widths
   dash.setColumnWidth(1, 50);  // ลำดับ
