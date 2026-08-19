@@ -941,6 +941,11 @@ function doPost(e) {
         if (cand.availStock <= 0) continue;
         if (remainingToCut <= 0) break;
 
+        const deductFromThis = Math.min(cand.availStock, remainingToCut);
+        const newAvail = cand.availStock - deductFromThis;
+        remainingToCut -= deductFromThis;
+        nextRowNo++;
+
         const dims = parseDimensionNumbers(cand.dim);
         const thick = dims.thick;
         const width = dims.width;
