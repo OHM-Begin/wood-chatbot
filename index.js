@@ -591,14 +591,14 @@ async function processMessage(msg) {
         cutNote = cutDimMatch[4] ? `${senderName} (${cutDimMatch[4].trim()})` : `เบิกตัดขนาด ${cutTargetQuery} โดย ${senderName}`;
     }
 
-    // 4.1 กรณีตัดตามรหัส Part สั้นๆ / ในประเทศ (เช่น "TM001 ตัด 786 100", "ตัด 786 100", "TM003 ตัด 789 500")
+    // 4.1 กรณีตัดตามรหัส Part หรือชื่อชนิดไม้ (เช่น "TM001 ตัด 786 100", "ตัด Poplar 50", "ตัด Birch 100", "ตัด MDF-BIRCH 20")
     if (!cutTargetQuery) {
-        let cutDomesticPartMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s+)?ตัด(?:\s*part|\s*พาร์ท|\s*รหัส)?\s*([0-9]{3,5})[\s,:]+(\d+)(?:\s+(.+))?$/i);
-        if (cutDomesticPartMatch) {
-            cutInvoice = cutDomesticPartMatch[1] ? cutDomesticPartMatch[1].trim() : null;
-            cutTargetQuery = cutDomesticPartMatch[2].trim();
-            cutQty = parseInt(cutDomesticPartMatch[3], 10);
-            cutNote = cutDomesticPartMatch[4] ? `${senderName} (${cutDomesticPartMatch[4].trim()})` : `เบิกตัด Part ${cutTargetQuery} โดย ${senderName}`;
+        let cutPartOrSpeciesMatch = rawText.match(/^(?:([a-zA-Z0-9_\-\/]+)\s+)?ตัด(?:\s*part|\s*พาร์ท|\s*รหัส|\s*ไม้)?\s*([a-zA-Z0-9\-_]{2,20})[\s,:]+(\d+)(?:\s+(.+))?$/i);
+        if (cutPartOrSpeciesMatch && !['มัด', 'bdl', 'ขนาด'].includes(cutPartOrSpeciesMatch[2].toLowerCase())) {
+            cutInvoice = cutPartOrSpeciesMatch[1] ? cutPartOrSpeciesMatch[1].trim() : null;
+            cutTargetQuery = cutPartOrSpeciesMatch[2].trim();
+            cutQty = parseInt(cutPartOrSpeciesMatch[3], 10);
+            cutNote = cutPartOrSpeciesMatch[4] ? `${senderName} (${cutPartOrSpeciesMatch[4].trim()})` : `เบิกตัด ${cutTargetQuery} โดย ${senderName}`;
         }
     }
 
