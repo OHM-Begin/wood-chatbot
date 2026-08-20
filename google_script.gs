@@ -508,16 +508,16 @@ function buildDashboardSheet() {
   dash.setRowHeight(sec2TitleRow, 28);
 
   const sec2HeaderRow = sec2TitleRow + 1;
-  const agingHeaders = ["ช่วงอายุไม้", "เกณฑ์วัน", "จำนวนมัด / รายการ", "สต็อกคงเหลือ (PCS)", "สถานะการจัดการ"];
+  const agingHeaders = ["ช่วงอายุไม้", "เกณฑ์วัน", "สต็อกรับเข้า (PCS)", "สต็อกคงเหลือ (PCS)", "สถานะการจัดการ"];
   dash.getRange(sec2HeaderRow, 1, 1, agingHeaders.length).setValues([agingHeaders]).setBackground("#475569").setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center");
   dash.setRowHeight(sec2HeaderRow, 26);
 
   const a1 = sec2HeaderRow + 1;
   const a2 = sec2HeaderRow + 2;
   const a3 = sec2HeaderRow + 3;
-  dash.getRange(`A${a1}:E${a1}`).setValues([["🟢 ไม้ล็อตใหม่ (Fresh)", "< 30 วัน", "=COUNTIFS('Packing List'!B2:B, \">=\" & (TODAY()-30), 'Packing List'!M2:M, \">0\", 'Packing List'!C2:C, \"<>\")", "=SUMIFS('Packing List'!M2:M, 'Packing List'!B2:B, \">=\" & (TODAY()-30)) - SUM('ตัดไม้'!K2:K)", "ใช้งานได้ตามปกติ"]]).setBackground("#f0fdf4").setFontColor("#166534");
-  dash.getRange(`A${a2}:E${a2}`).setValues([["🟡 ไม้คลังปานกลาง (Medium)", "31 - 60 วัน", "=COUNTIFS('Packing List'!B2:B, \">=\" & (TODAY()-60), 'Packing List'!B2:B, \"<\" & (TODAY()-30), 'Packing List'!M2:M, \">0\", 'Packing List'!C2:C, \"<>\")", "=SUMIFS('Packing List'!M2:M, 'Packing List'!B2:B, \">=\" & (TODAY()-60), 'Packing List'!B2:B, \"<\" & (TODAY()-30))", "ควรเร่งนำไปตัดตามคิว FIFO"]]).setBackground("#fffbeb").setFontColor("#854d0e");
-  dash.getRange(`A${a3}:E${a3}`).setValues([["🔴 ไม้ค้างนาน (Slow-Moving)", "> 60 วัน", "=COUNTIFS('Packing List'!B2:B, \"<\" & (TODAY()-60), 'Packing List'!M2:M, \">0\", 'Packing List'!C2:C, \"<>\")", "=SUMIFS('Packing List'!M2:M, 'Packing List'!B2:B, \"<\" & (TODAY()-60))", "⚠️ ตรวจสอบสภาพไม้/เร่งระบาย"]]).setBackground("#fef2f2").setFontColor("#991b1b");
+  dash.getRange(`A${a1}:E${a1}`).setValues([["🟢 ไม้ล็อตใหม่ (Fresh)", "< 30 วัน", "=SUMIFS('Packing List'!M2:M, 'Packing List'!B2:B, \">=\" & (TODAY()-30))", "=SUMIFS('Packing List'!R2:R, 'Packing List'!B2:B, \">=\" & (TODAY()-30))", "ใช้งานได้ตามปกติ"]]).setBackground("#f0fdf4").setFontColor("#166534");
+  dash.getRange(`A${a2}:E${a2}`).setValues([["🟡 ไม้คลังปานกลาง (Medium)", "31 - 60 วัน", "=SUMIFS('Packing List'!M2:M, 'Packing List'!B2:B, \">=\" & (TODAY()-60), 'Packing List'!B2:B, \"<\" & (TODAY()-30))", "=SUMIFS('Packing List'!R2:R, 'Packing List'!B2:B, \">=\" & (TODAY()-60), 'Packing List'!B2:B, \"<\" & (TODAY()-30))", "ควรเร่งนำไปตัดตามคิว FIFO"]]).setBackground("#fffbeb").setFontColor("#854d0e");
+  dash.getRange(`A${a3}:E${a3}`).setValues([["🔴 ไม้ค้างนาน (Slow-Moving)", "> 60 วัน", "=SUMIFS('Packing List'!M2:M, 'Packing List'!B2:B, \"<\" & (TODAY()-60))", "=SUMIFS('Packing List'!R2:R, 'Packing List'!B2:B, \"<\" & (TODAY()-60))", "⚠️ ตรวจสอบสภาพไม้/เร่งระบาย"]]).setBackground("#fef2f2").setFontColor("#991b1b");
   
   dash.getRange(`C${a1}:D${a3}`).setNumberFormat("#,##0").setHorizontalAlignment("right");
   dash.getRange(`A${a1}:B${a3}`).setHorizontalAlignment("center");
@@ -527,17 +527,17 @@ function buildDashboardSheet() {
   dash.setRowHeight(a3, 24);
 
   // Section 3: Length & Volume Summary
-  const lenHeaders = ["กลุ่มความยาวไม้", "ช่วงขนาด (MM)", "จำนวนมัด / รายการ", "ปริมาตรตามตู้ (M³)", "สัดส่วน %"];
+  const lenHeaders = ["กลุ่มความยาวไม้", "ช่วงขนาด (MM)", "ยอดรวม (PCS)", "ปริมาตรตามตู้ (M³)", "สัดส่วน %"];
   dash.getRange(sec2HeaderRow, 7, 1, lenHeaders.length).setValues([lenHeaders]).setBackground("#475569").setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center");
 
   const l1 = sec2HeaderRow + 1;
   const l2 = sec2HeaderRow + 2;
   const l3 = sec2HeaderRow + 3;
   const l4 = sec2HeaderRow + 4;
-  dash.getRange(`G${l1}:K${l1}`).setValues([["ความยาวมาตรฐาน", "500 - 600 MM", "=COUNTIFS('Packing List'!I2:I, \">=500\", 'Packing List'!I2:I, \"<=600\", 'Packing List'!C2:C, \"<>\")", "=SUMIFS('Packing List'!L2:L, 'Packing List'!I2:I, \">=500\", 'Packing List'!I2:I, \"<=600\")", `=J${l1}/J${l4}`]]).setBackground("#f8fafc");
-  dash.getRange(`G${l2}:K${l2}`).setValues([["ความยาวสั้น", "< 500 MM", "=COUNTIFS('Packing List'!I2:I, \"<500\", 'Packing List'!I2:I, \">0\", 'Packing List'!C2:C, \"<>\")", "=SUMIFS('Packing List'!L2:L, 'Packing List'!I2:I, \"<500\", 'Packing List'!I2:I, \">0\")", `=J${l2}/J${l4}`]]).setBackground("#f8fafc");
-  dash.getRange(`G${l3}:K${l3}`).setValues([["ความยาวพิเศษ (ไม้ยาว)", "> 600 MM", `=I${l4}-I${l1}-I${l2}`, `=J${l4}-J${l1}-J${l2}`, `=J${l3}/J${l4}`]]).setBackground("#f8fafc");
-  dash.getRange(`G${l4}:K${l4}`).setValues([["รวมทั้งหมด", "ทุกความยาว", "=COUNTA('Packing List'!C2:C)", "=SUM('Packing List'!L2:L)", "100.0%"]]).setBackground("#e2e8f0").setFontWeight("bold");
+  dash.getRange(`G${l1}:K${l1}`).setValues([["ความยาวมาตรฐาน", "500 - 600 MM", "=SUMIFS('Packing List'!K2:K, 'Packing List'!I2:I, \">=500\", 'Packing List'!I2:I, \"<=600\")", "=SUMIFS('Packing List'!L2:L, 'Packing List'!I2:I, \">=500\", 'Packing List'!I2:I, \"<=600\")", `=J${l1}/J${l4}`]]).setBackground("#f8fafc");
+  dash.getRange(`G${l2}:K${l2}`).setValues([["ความยาวสั้น", "< 500 MM", "=SUMIFS('Packing List'!K2:K, 'Packing List'!I2:I, \"<500\", 'Packing List'!I2:I, \">0\")", "=SUMIFS('Packing List'!L2:L, 'Packing List'!I2:I, \"<500\", 'Packing List'!I2:I, \">0\")", `=J${l2}/J${l4}`]]).setBackground("#f8fafc");
+  dash.getRange(`G${l3}:K${l3}`).setValues([["ความยาวพิเศษ (ไม้ยาว)", "> 600 MM", "=SUMIFS('Packing List'!K2:K, 'Packing List'!I2:I, \">600\")", "=SUMIFS('Packing List'!L2:L, 'Packing List'!I2:I, \">600\")", `=J${l3}/J${l4}`]]).setBackground("#f8fafc");
+  dash.getRange(`G${l4}:K${l4}`).setValues([["รวมทั้งหมด", "ทุกความยาว", "=SUM('Packing List'!K2:K)", "=SUM('Packing List'!L2:L)", "100.0%"]]).setBackground("#e2e8f0").setFontWeight("bold");
 
   dash.getRange(`I${l1}:I${l4}`).setNumberFormat("#,##0").setHorizontalAlignment("right");
   dash.getRange(`J${l1}:J${l4}`).setNumberFormat("#,##0.00").setHorizontalAlignment("right");
